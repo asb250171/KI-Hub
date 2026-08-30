@@ -34,6 +34,7 @@ bash scripts/validate.sh    # YAML + Routing-Logik + Secrets-Hygiene
 |---|---|
 | Architektur & Datenfluss | [`docs/architecture.md`](docs/architecture.md) |
 | Entscheidungsmatrix Aufgabe→Modell | [`router/routing-matrix.md`](router/routing-matrix.md) |
+| Deployment per SSH (Schritt für Schritt) | [`docs/deploy-ssh.md`](docs/deploy-ssh.md) |
 | Betrieb, Kosten, Budgets, Troubleshooting | [`docs/betriebshandbuch.md`](docs/betriebshandbuch.md) |
 | DSGVO-Mapping | [`docs/datenschutz.md`](docs/datenschutz.md) |
 | n8n-Workflows anbinden | [`n8n/router-usage.md`](n8n/router-usage.md) |
