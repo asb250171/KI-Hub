@@ -75,6 +75,24 @@ Umgestellt wurden zwei Nodes (nur im Draft):
 oder den Node-URL zurück auf `https://api.anthropic.com/v1/messages` mit
 Anthropic-Credential setzen.
 
+## Migrationsstatus: ISO Lead Lokal
+
+**Stand:** Draft migriert, **noch nicht publiziert**. Workflow-ID `chwRZ7ewcaqlJTsa`.
+
+Umgestellt (nur im Draft):
+1. **„Ollama Kandidaten"** und **„Ollama Analyse"** → rufen jetzt
+   `http://litellm:4000/v1/chat/completions` mit `model: hub-private`
+   (**rein lokal, kein Cloud-Fallback** → DSGVO). Format Ollama `/api/generate`
+   → OpenAI `/chat/completions`; Prompt aus `ollamaRequest.prompt`,
+   `response_format: json_object`; Auth `Bearer {{ $env.LITELLM_KEY }}`.
+2. Zwei neue Mini-Nodes **„Antwort normalisieren (Kandidaten/Analyse)"** mappen
+   `choices[0].message.content` → `response`, damit die bestehenden Parse-Nodes
+   („Kandidaten parsen", „Recherche parsen") **unverändert** bleiben.
+
+Go-live/Rollback identisch zum Abschnitt oben (Router deployen → `LITELLM_KEY`
+in n8n → im UI testen → publizieren). Da `hub-private` lokal bleibt, entstehen
+hier **keine Cloud-Tokenkosten**; das Logging zeigt Modell + 0-€-Vorgänge.
+
 ## LITELLM_KEY in n8n hinterlegen
 Als n8n-Environment-Variable oder Credential setzen (nicht hart im Workflow):
 `LITELLM_KEY = sk-...` (Master-Key oder – besser – ein pro Projekt erzeugter
