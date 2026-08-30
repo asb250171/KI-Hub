@@ -1,0 +1,177 @@
+# ============================================================================
+# KI-Hub – LiteLLM Gateway  |  Router-Konfiguration (Herzstück)
+# ----------------------------------------------------------------------------
+# Ein einziger OpenAI-kompatibler Endpunkt vor allen Anbietern.
+# n8n (und jeder andere Consumer) ruft NUR einen SEMANTISCHEN ALIAS auf
+# (z. B. "hub-classify"). Welches echte Modell dahinter steckt, welche
+# Fallback-Kette gilt und was es kostet, entscheidet ausschließlich diese
+# Datei – zentral, wiederverwendbar, ohne Änderung an den Workflows.
+#
+# Prinzip: pro Aufgabe das GÜNSTIGSTE tragfähige Modell.
+#   - Sensible Daten      -> hub-private / hub-local-*  (nur lokal, Ollama)
+#   - Klassifikation/Extra-> günstige Cloud-Modelle + lokaler Fallback
+#   - Reasoning/Codierung -> stärkere Modelle, nur wenn nötig
+#
+# Details & Begründung: ../router/routing-matrix.md
+# ============================================================================
+
+model_list:
+  # ------------------------------------------------------------------ #
+  # LOKAL (Ollama auf Hetzner) – DSGVO-sicher, kostenlos, tokensparend  #
+  # ------------------------------------------------------------------ #
+  # Für sensible/vertrauliche Daten. KEINE Cloud-Fallbacks (s. router_settings).
+  - model_name: hub-private
+    litellm_params:
+      model: ollama/qwen2.5:3b
+      api_base: os.environ/OLLAMA_API_BASE
+    model_info:
+      mode: chat
+      metadata: { hub_zweck: "Sensible Daten, nur lokal", datenschutz: "lokal" }
+
+  # Alias für einfache lokale Aufgaben ohne Datenschutz-Zwang (mit Cloud-Fallback).
+  - model_name: hub-local
+    litellm_params:
+      model: ollama/qwen2.5:3b
+      api_base: os.environ/OLLAMA_API_BASE
+    model_info:
+      mode: chat
+      metadata: { hub_zweck: "Einfache Aufgaben, lokal zuerst", datenschutz: "lokal-bevorzugt" }
+
+  # ------------------------------------------------------------------ #
+  # SEMANTISCHE AUFGABEN-ALIASE (Cloud, günstig -> stark)              #
+  # ------------------------------------------------------------------ #
+
+  # Klassifikation / Routing-Entscheidungen: billig + schnell.
+  - model_name: hub-classify
+    litellm_params:
+      model: anthropic/claude-3-5-haiku-latest
+      api_key: os.environ/ANTHROPIC_API_KEY
+    model_info:
+      mode: chat
+      metadata: { hub_zweck: "Klassifikation/Kategorisierung", datenschutz: "cloud-ok" }
+
+  # Extraktion strukturierter Felder aus Dokumenten: großes Kontextfenster, günstig.
+  - model_name: hub-extract
+    litellm_params:
+      model: gemini/gemini-1.5-flash
+      api_key: os.environ/GEMINI_API_KEY
+    model_info:
+      mode: chat
+      metadata: { hub_zweck: "Extraktion strukturierter Daten", datenschutz: "cloud-ok" }
+
+  # Zusammenfassung: günstig, robust.
+  - model_name: hub-summarize
+    litellm_params:
+      model: anthropic/claude-3-5-haiku-latest
+      api_key: os.environ/ANTHROPIC_API_KEY
+    model_info:
+      mode: chat
+      metadata: { hub_zweck: "Zusammenfassung", datenschutz: "cloud-ok" }
+
+  # Übersetzung: günstig, großes Kontextfenster.
+  - model_name: hub-translate
+    litellm_params:
+      model: gemini/gemini-1.5-flash
+      api_key: os.environ/GEMINI_API_KEY
+    model_info:
+      mode: chat
+      metadata: { hub_zweck: "Übersetzung", datenschutz: "cloud-ok" }
+
+  # Textgenerierung (Kundentexte, E-Mails, Angebote): mittleres Modell.
+  - model_name: hub-generate
+    litellm_params:
+      model: anthropic/claude-3-5-sonnet-latest
+      api_key: os.environ/ANTHROPIC_API_KEY
+    model_info:
+      mode: chat
+      metadata: { hub_zweck: "Textgenerierung/Entwürfe", datenschutz: "cloud-ok" }
+
+  # Reasoning / komplexe Analyse: stärkstes Standardmodell, nur wenn nötig.
+  - model_name: hub-reason
+    litellm_params:
+      model: anthropic/claude-3-5-sonnet-latest
+      api_key: os.environ/ANTHROPIC_API_KEY
+    model_info:
+      mode: chat
+      metadata: { hub_zweck: "Komplexes Reasoning/Analyse", datenschutz: "cloud-ok" }
+
+  # Code-Aufgaben.
+  - model_name: hub-code
+    litellm_params:
+      model: anthropic/claude-3-5-sonnet-latest
+      api_key: os.environ/ANTHROPIC_API_KEY
+    model_info:
+      mode: chat
+      metadata: { hub_zweck: "Code-Generierung/Review", datenschutz: "cloud-ok" }
+
+  # ------------------------------------------------------------------ #
+  # KONKRETE FALLBACK-DEPLOYMENTS (von den Aliasen referenziert)       #
+  # ------------------------------------------------------------------ #
+  - model_name: fb-gemini-flash
+    litellm_params:
+      model: gemini/gemini-1.5-flash
+      api_key: os.environ/GEMINI_API_KEY
+  - model_name: fb-gemini-pro
+    litellm_params:
+      model: gemini/gemini-1.5-pro
+      api_key: os.environ/GEMINI_API_KEY
+  - model_name: fb-gpt-mini
+    litellm_params:
+      model: openai/gpt-4o-mini
+      api_key: os.environ/OPENAI_API_KEY
+  - model_name: fb-gpt-4o
+    litellm_params:
+      model: openai/gpt-4o
+      api_key: os.environ/OPENAI_API_KEY
+  - model_name: fb-haiku
+    litellm_params:
+      model: anthropic/claude-3-5-haiku-latest
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+# ============================================================================
+# ROUTER-EINSTELLUNGEN: Fallback-Ketten pro Alias
+# Anbieter A fällt aus/überlastet -> automatisch nächster Anbieter.
+# hub-private hat BEWUSST KEINEN Cloud-Fallback (Datenschutz).
+# ============================================================================
+router_settings:
+  routing_strategy: simple-shuffle
+  num_retries: 2
+  timeout: 600
+  # Reihenfolge = Priorität der Ausweichmodelle
+  fallbacks:
+    - { "hub-local":     ["hub-classify"] }
+    - { "hub-classify":  ["fb-gemini-flash", "fb-gpt-mini"] }
+    - { "hub-extract":   ["fb-haiku", "fb-gpt-mini"] }
+    - { "hub-summarize": ["fb-gemini-flash", "fb-gpt-mini"] }
+    - { "hub-translate": ["fb-haiku", "fb-gpt-mini"] }
+    - { "hub-generate":  ["fb-gpt-4o", "fb-gemini-pro"] }
+    - { "hub-reason":    ["fb-gpt-4o", "fb-gemini-pro"] }
+    - { "hub-code":      ["fb-gpt-4o", "fb-gemini-pro"] }
+  # Bei Kontext-Überlauf automatisch auf großes Kontextfenster ausweichen:
+  context_window_fallbacks:
+    - { "hub-extract":   ["fb-gemini-pro"] }
+    - { "hub-summarize": ["fb-gemini-pro"] }
+
+# ============================================================================
+# BEOBACHTBARKEIT & KOSTEN
+# LiteLLM schreibt pro Request Modellwahl, Token-Verbrauch und Kosten in die
+# Postgres-DB (siehe general_settings.database_url) -> auswertbar über
+# /spend/logs und /spend/report. Damit sind Einsparungen belegbar.
+# ============================================================================
+litellm_settings:
+  drop_params: true                 # unbekannte Params tolerieren (Provider-Kompatibilität)
+  num_retries: 2
+  request_timeout: 600
+  set_verbose: false
+  # Erfolgs-/Fehler-Logs (Kosten & Token) landen in der DB:
+  success_callback: ["postgres"]
+  failure_callback: ["postgres"]
+  # Optional externes Observability-Tool (auskommentiert, EU-Hosting möglich):
+  # success_callback: ["postgres", "langfuse"]
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/DATABASE_URL
+  store_model_in_db: true
+  # Globales Monatsbudget als Kostenbremse (ANNAHME: 200 €/Monat, anpassbar):
+  # -> zusätzlich pro Kunde/Projekt via virtuelle Keys begrenzbar (Betriebshandbuch).

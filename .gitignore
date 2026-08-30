@@ -1,0 +1,14 @@
+# Secrets – NIEMALS committen
+.env
+*.key
+*.pem
+secrets/
+
+# LiteLLM / Runtime
+*.log
+__pycache__/
+*.pyc
+
+# OS
+.DS_Store
+Thumbs.db

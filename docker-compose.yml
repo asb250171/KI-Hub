@@ -1,0 +1,68 @@
+# ============================================================================
+# KI-Hub – LiteLLM Gateway + Logging-DB
+# ----------------------------------------------------------------------------
+# Deployment auf dem BESTEHENDEN Hetzner-Server, im SELBEN Docker-Netz wie
+# n8n / Ollama / SearXNG. Dadurch erreicht LiteLLM Ollama unter http://ollama:11434
+# und n8n erreicht LiteLLM unter http://litellm:4000.
+#
+# ⚠️ ANNAHME (bitte bestätigen): Dein bestehendes n8n/Ollama-Setup nutzt ein
+#    Docker-Netz. Trage dessen echten Namen in .env als HUB_NETWORK ein.
+#    Ermitteln auf dem Server:  docker network ls
+# ============================================================================
+
+services:
+  litellm:
+    image: ghcr.io/berriai/litellm:main-stable
+    container_name: kihub-litellm
+    restart: unless-stopped
+    ports:
+      # Nur lokal binden; extern nur über Reverse-Proxy/n8n-internes Netz erreichbar.
+      - "127.0.0.1:4000:4000"
+    volumes:
+      - ./router/litellm-config.yaml:/app/config.yaml:ro
+    command: ["--config", "/app/config.yaml", "--port", "4000", "--num_workers", "2"]
+    environment:
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?LITELLM_MASTER_KEY fehlt in .env}
+      DATABASE_URL: postgresql://litellm:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD fehlt}@litellm-db:5432/litellm
+      OLLAMA_API_BASE: ${OLLAMA_API_BASE:-http://ollama:11434}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+    depends_on:
+      litellm-db:
+        condition: service_healthy
+    networks:
+      - hub
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:4000/health/liveliness"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  litellm-db:
+    image: postgres:16-alpine
+    container_name: kihub-litellm-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: litellm
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD fehlt}
+      POSTGRES_DB: litellm
+    volumes:
+      - litellm_pgdata:/var/lib/postgresql/data
+    networks:
+      - hub
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U litellm -d litellm"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  litellm_pgdata:
+
+networks:
+  # Bindet an das BESTEHENDE Netz von n8n/Ollama an (Name aus .env).
+  hub:
+    external: true
+    name: ${HUB_NETWORK:?HUB_NETWORK fehlt in .env – ermittle es mit 'docker network ls'}
