@@ -51,6 +51,30 @@ Antwort steht in `{{ $json.choices[0].message.content }}`.
 > `messages:[{role:'user',content: ...}]` umbauen und Antwort aus
 > `choices[0].message.content` lesen (statt `response`).
 
+## Migrationsstatus: Dokumenten-Digitalisierung (MFP → SharePoint)
+
+**Stand:** Draft migriert, **noch nicht publiziert** (aktive Version läuft weiter
+auf direktem Anthropic-Aufruf). Workflow-ID `NoHlGdl8WRn0PGbD`.
+
+Umgestellt wurden zwei Nodes (nur im Draft):
+1. **„Claude PDF-Analyse (direkt)"** → ruft jetzt `http://litellm:4000/v1/chat/completions`
+   mit `model: hub-classify` (bleibt Claude Haiku 4.5, PDF-fähig) im OpenAI-Format;
+   PDF als `type: file`-Part; Auth über Header `Bearer {{ $env.LITELLM_KEY }}`.
+2. **„Felder extrahieren"** → liest zusätzlich `choices[0].message.content`
+   (OpenAI-Format); bleibt abwärtskompatibel zum Anthropic-nativen Format.
+
+**Go-live-Checkliste (durch dich, in dieser Reihenfolge):**
+1. Router auf Hetzner deployen (`docs/betriebshandbuch.md`), Health-Check grün.
+2. In n8n die Env-Variable `LITELLM_KEY` setzen (Master- oder Kunden-Key) und
+   n8n neu starten, damit `$env.LITELLM_KEY` verfügbar ist.
+3. Workflow im n8n-UI öffnen → Draft testen (einzelnen Scan ausführen) →
+   Ergebnis prüfen (Teams „Klassifiziert …") → dann **publizieren**.
+4. Erste Läufe beobachten; im Router `GET /spend/logs` zeigt Modell + Kosten.
+
+**Rollback:** Im n8n-UI die vorherige Version wiederherstellen (Versionshistorie)
+oder den Node-URL zurück auf `https://api.anthropic.com/v1/messages` mit
+Anthropic-Credential setzen.
+
 ## LITELLM_KEY in n8n hinterlegen
 Als n8n-Environment-Variable oder Credential setzen (nicht hart im Workflow):
 `LITELLM_KEY = sk-...` (Master-Key oder – besser – ein pro Projekt erzeugter

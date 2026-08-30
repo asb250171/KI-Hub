@@ -42,9 +42,11 @@ model_list:
   # ------------------------------------------------------------------ #
 
   # Klassifikation / Routing-Entscheidungen: billig + schnell.
+  # Haiku 4.5 (statt 3.5) – unterstützt PDF-/Dokument-Input, das die
+  # Dokumenten-Digitalisierung braucht.
   - model_name: hub-classify
     litellm_params:
-      model: anthropic/claude-3-5-haiku-latest
+      model: anthropic/claude-haiku-4-5-20251001
       api_key: os.environ/ANTHROPIC_API_KEY
     model_info:
       mode: chat
@@ -62,7 +64,7 @@ model_list:
   # Zusammenfassung: günstig, robust.
   - model_name: hub-summarize
     litellm_params:
-      model: anthropic/claude-3-5-haiku-latest
+      model: anthropic/claude-haiku-4-5-20251001
       api_key: os.environ/ANTHROPIC_API_KEY
     model_info:
       mode: chat
@@ -125,7 +127,7 @@ model_list:
       api_key: os.environ/OPENAI_API_KEY
   - model_name: fb-haiku
     litellm_params:
-      model: anthropic/claude-3-5-haiku-latest
+      model: anthropic/claude-haiku-4-5-20251001
       api_key: os.environ/ANTHROPIC_API_KEY
 
 # ============================================================================
