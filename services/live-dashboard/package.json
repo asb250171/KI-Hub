@@ -1,0 +1,11 @@
+{
+  "name": "live-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Eigenständige Live-Prozesse-Ansicht neben n8n (liest n8n REST-API, SSE-Realtime, Archify-UI).",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node server.mjs"
+  }
+}
