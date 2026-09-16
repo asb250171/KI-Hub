@@ -19,10 +19,9 @@ services:
     restart: unless-stopped
     environment:
       - PORT=8080
-      - N8N_API_URL=http://n8n:5678      # interner Servicename von n8n im Netz n8n_default
-      - N8N_API_KEY=${N8N_API_KEY}       # aus .env (n8n → Einstellungen → n8n API → Key)
+      - DASHBOARD_URL=http://n8n:5678/webhook/dashboard-status  # interner n8n-Webhook im Netz n8n_default
+      - DASHBOARD_API_KEY=${DASHBOARD_API_KEY}                  # aus .env (= DASHBOARD_API_KEY aus Vercel), Header X-Dashboard-Key
       - POLL_MS=4000
-      - MAX_EXEC=200
     expose:
       - "8080"                            # nur netzintern; Caddy greift darauf zu
     networks:

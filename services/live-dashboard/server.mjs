@@ -1,7 +1,11 @@
 // Eigenständiger Live-Prozesse-Dienst (Option C) — läuft neben n8n auf dem
-// Hetzner-Server. Liest die n8n REST-API (serverseitig, API-Key bleibt hier),
-// baut den Snapshot und pusht ihn per SSE an den Browser. Zero-Dependency
-// (nur Node-Builtins, global fetch ab Node 18).
+// Hetzner-Server. Liest den internen n8n-Webhook "dashboard-status"
+// (serverseitig, Header-Key bleibt hier), baut den Snapshot und pusht ihn per
+// SSE an den Browser. Zero-Dependency (nur Node-Builtins, global fetch ab Node 18).
+//
+// Der Webhook (Workflow "Dashboard API - Live Workflow Status") fragt die
+// n8n-Postgres-DB ab und liefert { generatedAt, workflows[], executions[] } —
+// dadurch ist KEIN n8n-REST-API-Key nötig, nur der bestehende X-Dashboard-Key.
 
 import http from "node:http";
 import { readFile } from "node:fs/promises";
@@ -13,39 +17,26 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const PUBLIC = join(__dirname, "public");
 
 const PORT = Number(process.env.PORT || 8080);
-const N8N_API_URL = (process.env.N8N_API_URL || "http://n8n:5678").replace(/\/+$/, "");
-const N8N_API_KEY = process.env.N8N_API_KEY || "";
+// Interner n8n-Webhook "dashboard-status" (liest die n8n-Postgres-DB, liefert
+// { generatedAt, workflows[], executions[] }). Header-Auth: X-Dashboard-Key.
+const DASHBOARD_URL = process.env.DASHBOARD_URL || "http://n8n:5678/webhook/dashboard-status";
+const DASHBOARD_API_KEY = process.env.DASHBOARD_API_KEY || "";
 const POLL_MS = Math.max(2000, Number(process.env.POLL_MS || 4000));
-const MAX_EXEC = Number(process.env.MAX_EXEC || 200);
 
-// ── n8n REST ────────────────────────────────────────────────────────────────
-async function n8nGet(path) {
+// ── n8n dashboard-status Webhook ──────────────────────────────────────────────
+async function fetchDashboard() {
   const ctrl = new AbortController();
   const to = setTimeout(() => ctrl.abort(), 15000);
   try {
-    const res = await fetch(`${N8N_API_URL}${path}`, {
-      headers: { "X-N8N-API-KEY": N8N_API_KEY, accept: "application/json" },
+    const res = await fetch(DASHBOARD_URL, {
+      headers: { "X-Dashboard-Key": DASHBOARD_API_KEY, accept: "application/json" },
       signal: ctrl.signal,
     });
-    if (!res.ok) throw new Error(`n8n ${path} → HTTP ${res.status}`);
+    if (!res.ok) throw new Error(`dashboard-status → HTTP ${res.status}`);
     return await res.json();
   } finally {
     clearTimeout(to);
   }
-}
-
-async function fetchAll(path, cap) {
-  const out = [];
-  let cursor = "";
-  for (let i = 0; i < 20; i++) {
-    const sep = path.includes("?") ? "&" : "?";
-    const url = `${path}${sep}limit=250${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`;
-    const json = await n8nGet(url);
-    if (Array.isArray(json?.data)) out.push(...json.data);
-    cursor = json?.nextCursor || "";
-    if (!cursor || (cap && out.length >= cap)) break;
-  }
-  return cap ? out.slice(0, cap) : out;
 }
 
 // ── State + Poll-Loop ─────────────────────────────────────────────────────────
@@ -63,11 +54,10 @@ function broadcast() {
 
 async function poll() {
   try {
-    if (!N8N_API_KEY) throw new Error("N8N_API_KEY ist nicht gesetzt.");
-    const [workflows, executions] = await Promise.all([
-      fetchAll("/api/v1/workflows", 500),
-      fetchAll("/api/v1/executions?includeData=false", MAX_EXEC),
-    ]);
+    if (!DASHBOARD_API_KEY) throw new Error("DASHBOARD_API_KEY ist nicht gesetzt.");
+    const data = await fetchDashboard();
+    const workflows = Array.isArray(data?.workflows) ? data.workflows : [];
+    const executions = Array.isArray(data?.executions) ? data.executions : [];
     snapshot = buildSnapshot(workflows, executions);
     lastError = null;
     lastOkAt = new Date().toISOString();
@@ -123,7 +113,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`[live-dashboard] listening on :${PORT} → n8n ${N8N_API_URL} (poll ${POLL_MS}ms)`);
+  console.log(`[live-dashboard] listening on :${PORT} → ${DASHBOARD_URL} (poll ${POLL_MS}ms)`);
   poll();
   setInterval(poll, POLL_MS);
 });
