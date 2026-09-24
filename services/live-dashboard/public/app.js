@@ -17,7 +17,7 @@ const state = { snap:null, error:null, lastOkAt:null, sort:"default", sysFilter:
 // ── DOM-Shell ──────────────────────────────────────────────────────────────────
 const root = document.getElementById("root");
 root.innerHTML = `
-  <div class="row">
+  <div class="row topbar">
     <h1>Live-Prozesse</h1>
     <span class="pill" id="livePill" style="background:rgba(0,217,232,.13);color:var(--n8n)">Live</span>
     <span class="mono" id="stand" style="font-size:11px;color:var(--dim)"></span>
@@ -142,11 +142,11 @@ function render(){
   // SVG (Gruppen + Kanten)
   let svg="";
   lay.groups.forEach(g=>{const c=SYSTEM_COLOR[g.s];const run=(lay.bySys[g.s]||[]).some(n=>n.status==="running");
-    svg+=`<rect x="${g.x}" y="${g.y}" width="${g.w}" height="${g.h}" rx="12" fill="${c}0d" stroke="${c}" stroke-opacity=".45" stroke-width="1" stroke-dasharray="5 5" class="${run?"pulse":""}"/>`;});
-  snap.edges.forEach(e=>{const s=lay.cr[e.from],t=lay.cr[e.to];if(!s||!t)return;const p=orth(s,t);const src=nodes.find(n=>n.id===e.from);const active=src&&src.status==="running";const col=src?SYSTEM_COLOR[src.system]:"#5b6b83";const stroke=active?col:"#5b6b83";
+    svg+=`<rect x="${g.x}" y="${g.y}" width="${g.w}" height="${g.h}" rx="18" fill="${c}14" stroke="${c}" stroke-opacity=".4" stroke-width="1" class="${run?"pulse":""}"/>`;});
+  snap.edges.forEach(e=>{const s=lay.cr[e.from],t=lay.cr[e.to];if(!s||!t)return;const p=orth(s,t);const src=nodes.find(n=>n.id===e.from);const active=src&&src.status==="running";const col=src?SYSTEM_COLOR[src.system]:"#9fb0cc";const stroke=active?col:"#9fb0cc";
     svg+=`<path d="${pathD(p)}" fill="none" stroke="${stroke}" stroke-width="${active?2:1.5}" stroke-opacity="${active?.95:.6}"/><polygon points="${arrow(p)}" fill="${stroke}" fill-opacity="${active?.95:.7}"/>`;
     if(active)svg+=`<path d="${pathD(p)}" fill="none" stroke="${col}" stroke-width="2.5" stroke-opacity=".5" class="flow"/><circle r="3" fill="${col}" class="dot" style="offset-path:path('${pathD(p)}')"></circle>`;
-    if(e.label)svg+=`<text x="${(p[1][0]+p[2][0])/2}" y="${(p[1][1]+p[2][1])/2-5}" fill="#98A3B5" font-size="9" text-anchor="middle" class="mono">${esc(e.label)}</text>`;});
+    if(e.label)svg+=`<text x="${(p[1][0]+p[2][0])/2}" y="${(p[1][1]+p[2][1])/2-5}" fill="rgba(226,233,245,.7)" font-size="9" text-anchor="middle" class="mono">${esc(e.label)}</text>`;});
 
   // Karten + Gruppentitel (HTML)
   let html=`<svg width="${lay.W}" height="${lay.H}" style="position:absolute;inset:0;overflow:visible">${svg}</svg>`;
@@ -157,7 +157,7 @@ function render(){
       <span class="mono" style="margin-left:auto;font-size:10px;color:var(--dim)">${g.count}</span></div>`;
     if(g.count===0)html+=`<div class="mono" style="position:absolute;left:${g.x+14}px;top:${g.y+40}px;font-size:10px;color:var(--dim)">${g.s==="openai"?"nicht genutzt":"—"}</div>`;});
   nodes.forEach(n=>{const r=lay.cr[n.id];if(!r)return;const c=SYSTEM_COLOR[n.system];const run=n.status==="running";const dim=state.sysFilter!=="all"&&n.system!==state.sysFilter || state.statusFilter!=="all"&&n.status!==state.statusFilter;const seld=state.selected===n.id;
-    html+=`<button data-card data-id="${n.id}" style="position:absolute;left:${r.x}px;top:${r.y}px;width:${r.w}px;height:${r.h}px;background:var(--card);border:1px solid ${seld?c:"var(--border)"};border-left:3px solid ${c};border-radius:8px;padding:6px 9px;text-align:left;cursor:pointer;overflow:hidden;color:var(--text);opacity:${dim?.3:n.active?1:.7};${run?`box-shadow:0 0 0 1px ${c}55,0 0 16px -4px ${c}`:""}">
+    html+=`<button data-card data-id="${n.id}" class="card" style="position:absolute;left:${r.x}px;top:${r.y}px;width:${r.w}px;height:${r.h}px;border:1px solid ${seld?c:"var(--glass-border)"};border-left:3px solid ${c};border-radius:12px;padding:6px 9px;text-align:left;cursor:pointer;overflow:hidden;color:var(--text);opacity:${dim?.3:n.active?1:.7};${run?`box-shadow:0 0 0 1px ${c}66,0 0 22px -4px ${c},inset 0 1px 0 var(--glass-highlight)`:""}">
       <div style="font-size:11.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(shortName(n.name))}</div>
       <div style="margin-top:5px;display:flex;align-items:center;gap:6px">${badge(n.status)}${!n.active?'<span class="mono" style="font-size:9px;color:var(--dim)">inaktiv</span>':""}
         ${(n.uses||[]).length?`<span style="margin-left:auto;display:flex;gap:4px">${n.uses.slice(0,3).map(u=>`<span style="width:6px;height:6px;border-radius:999px;background:${SYSTEM_COLOR[u]}"></span>`).join("")}</span>`:""}</div>
@@ -178,12 +178,12 @@ function detailHTML(n){
   const inc=(state.snap.edges||[]).filter(e=>e.to===n.id), out=(state.snap.edges||[]).filter(e=>e.from===n.id);
   const nm=Object.fromEntries(state.snap.nodes.map(x=>[x.id,x.name]));
   const f=(v)=>v?new Date(v).toLocaleString("de-DE"):"Nicht verfügbar";
-  const row=(l,v)=>`<div style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid #29334455"><span style="color:var(--dim);font-size:11px">${l}</span><span class="mono" style="font-size:11px;text-align:right">${esc(v)}</span></div>`;
+  const row=(l,v)=>`<div style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.08)"><span style="color:var(--dim);font-size:11px">${l}</span><span class="mono" style="font-size:11px;text-align:right">${esc(v)}</span></div>`;
   const conns=(arr,lbl)=>arr.length?`<div style="margin-top:8px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);margin-bottom:6px">${lbl} (${arr.length})</div>${arr.map(e=>`<div class="item" data-goto="${e.from===n.id?e.to:e.from}"><span style="flex:1;font-size:11px">${esc(nm[e.from===n.id?e.to:e.from]||"")}</span><span class="mono" style="font-size:9px;color:var(--dim)">${esc(e.label||"")}</span></div>`).join("")}</div>`:"";
-  return `<div style="padding:14px;background:linear-gradient(160deg,${c}14,var(--surface) 70%);border-bottom:1px solid var(--border)">
+  return `<div style="padding:14px;background:linear-gradient(160deg,${c}30,transparent 75%);border-bottom:1px solid var(--glass-border)">
       <span class="badge" style="color:${c};background:${c}1c"><span style="width:6px;height:6px;border-radius:999px;background:${c}"></span>${SYSTEM_NAME[n.system]}</span>
       <div style="margin-top:8px;font-size:13px;font-weight:700;line-height:1.3">${esc(n.name)}</div>
-      <div style="margin-top:8px;display:flex;gap:6px">${badge(n.status)}<span class="badge" style="background:${n.active?"#0e3b2e":"#26303f"};color:${n.active?"#6ee7b7":"var(--dim)"}">${n.active?"Aktiv":"Inaktiv"}</span></div>
+      <div style="margin-top:8px;display:flex;gap:6px">${badge(n.status)}<span class="badge" style="background:${n.active?"rgba(53,196,141,.18)":"rgba(255,255,255,.08)"};border:1px solid ${n.active?"rgba(53,196,141,.45)":"var(--glass-border)"};color:${n.active?"#6ee7b7":"var(--dim)"}">${n.active?"Aktiv":"Inaktiv"}</span></div>
     </div>
     <div style="flex:1;overflow:auto;padding:14px">
       ${n.note?`<div style="font-size:12px;color:var(--dim);margin-bottom:10px">${esc(n.note)}</div>`:""}
@@ -213,7 +213,7 @@ function renderFloat(nodes){
   if(state.panelOpen || !state.selected) return;
   const sel=nodeById(nodes,state.selected); if(!sel) return;
   const fp=document.createElement("div"); fp.className="float"; fp.id="floatPanel";
-  fp.style.cssText+=";display:flex;flex-direction:column;background:var(--surface)";
+  fp.style.cssText+=";display:flex;flex-direction:column";
   fp.innerHTML = `<h2 style="display:flex;justify-content:space-between;align-items:center">Detail <button class="btn" id="floatClose" style="height:24px;min-width:24px">✕</button></h2>`+detailHTML(sel);
   canvas.appendChild(fp); wireDetail(fp);
   const cl=fp.querySelector("#floatClose"); if(cl) cl.onclick=()=>{ state.selected=null; render(); };

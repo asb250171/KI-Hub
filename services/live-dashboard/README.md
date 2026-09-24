@@ -21,7 +21,7 @@ live-dashboard ──(SSE /events)──> Browser   (Push bei jedem Poll)
 ```
 
 ## Endpunkte
-- `GET /` – Archify-UI (dark), Pan/Zoom, Sortierung, Filter, Vollbild, einklappbar
+- `GET /` – Archify-UI (Glassmorphism, dark), Pan/Zoom, Sortierung, Filter, Vollbild, einklappbar
 - `GET /events` – SSE-Stream (Snapshot bei Verbindung + bei jedem Poll)
 - `GET /healthz` – JSON `{ ok, lastOkAt, ageMs, error }`
 
