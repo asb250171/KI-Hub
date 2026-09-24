@@ -1,0 +1,32 @@
+# Eigenständiges Compose-Projekt für den Live-Dashboard-Dienst.
+#
+# Läuft NEBEN dem bestehenden n8n-Stack, ohne dessen /opt/n8n/compose.yml
+# anzufassen: der Dienst hängt sich an das bereits existierende Docker-Netz
+# "n8n_default" (external) und erreicht n8n dadurch intern unter
+# http://n8n:5678. Der bereits laufende Caddy (n8n-caddy-1) liegt im selben
+# Netz und kann den Dienst per Servicename "live-dashboard" proxien.
+#
+# Start:  docker compose up -d --build
+# Logs:   docker compose logs -f
+# Der Dienst veröffentlicht KEINEN Host-Port (nur intern erreichbar) —
+# der Zugriff von außen läuft ausschließlich über Caddy + Basic-Auth.
+
+services:
+  live-dashboard:
+    build: .
+    image: live-dashboard:latest
+    container_name: live-dashboard
+    restart: unless-stopped
+    environment:
+      - PORT=8080
+      - DASHBOARD_URL=http://n8n:5678/webhook/dashboard-status  # interner n8n-Webhook im Netz n8n_default
+      - DASHBOARD_API_KEY=${DASHBOARD_API_KEY}                  # aus .env (= DASHBOARD_API_KEY aus Vercel), Header X-Dashboard-Key
+      - POLL_MS=4000
+    expose:
+      - "8080"                            # nur netzintern; Caddy greift darauf zu
+    networks:
+      - n8n_default
+
+networks:
+  n8n_default:
+    external: true
