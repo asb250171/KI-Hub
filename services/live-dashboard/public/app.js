@@ -193,7 +193,7 @@ function setView(v) {
   const main = $("#main");
   main.innerHTML = v === "cockpit" ? cockpitShell() : workflowsShell();
   if (v === "cockpit") {
-    orbit = new Orbit($("#orbitWrap"), (id) => openDrawer(id));
+    orbit = new Radial($("#orbitWrap"), (id) => openDrawer(id));
     main.querySelectorAll(".enter").forEach((el, i) => (el.style.animationDelay = `${i * 70}ms`));
   } else wireWorkflows();
   update(true);
@@ -220,6 +220,7 @@ function cockpitShell() {
       <div class="card orbit-card enter">
         <div class="card-h"><h2>Systemlandschaft</h2><span class="meta" id="orbitMeta">Live · Datenfluss nach n8n</span></div>
         <div class="orbit-wrap" id="orbitWrap"></div>
+        <div class="orbit-sys" id="orbitSys"></div>
         <div class="orbit-legend" id="orbitLegend">
           <span><i style="background:var(--ok)"></i>Erfolgreich</span><span><i style="background:var(--err)"></i>Fehler</span>
           <span><i style="background:var(--run)"></i>Läuft</span><span><i style="background:var(--warn)"></i>Wartet</span>
@@ -363,7 +364,7 @@ function updateTimeline() {
   const tot = tl.reduce((a, b) => a + b.success + b.error + b.other, 0);
   const peak = tl.reduce((m, b, i) => (b.success + b.error + b.other > m.v ? { v: b.success + b.error + b.other, i } : m), { v: 0, i: 0 });
   $("#tlMeta").textContent = `${nf.format(tot)} Läufe · Spitze ${new Date(tl[peak.i].t).getHours()}:00 Uhr`;
-  const W = host.clientWidth - 36 || 600, H = 210, ml = 30, mr = 4, mt = 8, mb = 24;
+  const W = host.clientWidth - 36 || 600, H = Math.max(200, host.clientHeight - 24 || 210), ml = 30, mr = 4, mt = 8, mb = 24;
   const pw = W - ml - mr, ph = H - mt - mb;
   const rawMax = Math.max(1, ...tl.map((b) => b.success + b.error + b.other));
   const stepN = rawMax <= 4 ? 1 : rawMax <= 10 ? 2 : rawMax <= 25 ? 5 : rawMax <= 50 ? 10 : Math.ceil(rawMax / 50) * 10;
@@ -391,7 +392,7 @@ function updateTimeline() {
     svg += `<g class="col" data-i="${i}"><rect class="bar-hit" x="${ml + i * cw}" y="${mt}" width="${cw}" height="${ph}" rx="6"/>${g}
       ${i % 6 === 0 || last ? `<text x="${x + bw / 2}" y="${H - 6}" text-anchor="middle" ${last ? 'style="fill:var(--text)"' : ""}>${last ? "jetzt" : String(hr).padStart(2, "0") + ":00"}</text>` : ""}</g>`;
   });
-  host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Ausführungen pro Stunde in den letzten 24 Stunden">${svg}</svg>`;
+  host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" style="height:${H}px" role="img" aria-label="Ausführungen pro Stunde in den letzten 24 Stunden">${svg}</svg>`;
   host.querySelectorAll(".col").forEach((g) => {
     g.onmousemove = (e) => {
       const b = tl[+g.dataset.i], hr = new Date(b.t).getHours();
@@ -542,20 +543,27 @@ function showTip(e, html) {
 }
 function hideTip() { $("#tip").hidden = true; }
 
-// ── Orbit: Systemlandschaft als lebendige Karte ───────────────────────────────
-// n8n im Zentrum, alle anderen Systeme auf einer Ellipse. Workflows kreisen als
-// Punkte um ihr System (Farbe = Status). Partikel zeigen den Datenfluss nach
-// n8n; neue Läufe starten als Komet, Abschlüsse lösen eine Welle aus.
-class Orbit {
+// ── Radial-Leitstand: Systemlandschaft als Instrument ─────────────────────────
+// n8n im Zentrum. Jedes System besitzt einen festen Sektor des Außenrings
+// (Breite ∝ Anzahl Workflows), die Workflows sitzen als radial ausgerichtete
+// Zellen darin (alphabetisch, Farbe = Status). Ein Radar-Sweep tastet den Ring
+// ab, laufende Workflows senden Lichtstrahlen zum Kern, Abschlüsse lösen einen
+// Puls zum Kern und eine Schockwelle aus. Workflow-Kanten laufen als Sehnen
+// durch das Innere.
+const SECTOR_ORDER = ["hubspot", "claude", "openai", "m365", "monday", "stripe", "extern", "n8n"];
+const TAU = Math.PI * 2;
+const normA = (a) => ((a % TAU) + TAU) % TAU;
+
+class Radial {
   constructor(wrap, onPick) {
     this.wrap = wrap; this.onPick = onPick;
     this.canvas = document.createElement("canvas");
     this.canvas.setAttribute("role", "img");
-    this.canvas.setAttribute("aria-label", "Systemlandschaft: n8n im Zentrum, Workflows kreisen um ihre Systeme.");
+    this.canvas.setAttribute("aria-label", "Radial-Leitstand: n8n im Zentrum, jedes System hat einen Sektor, Workflows sind Zellen im Ring.");
     wrap.appendChild(this.canvas);
     this.ctx = this.canvas.getContext("2d");
     this.t = 0; this.last = performance.now(); this.born = performance.now();
-    this.fx = []; this.dots = []; this.sysPos = {}; this.prev = new Map(); this.hover = null; this.alive = true;
+    this.fx = []; this.cells = []; this.sectors = []; this.prev = new Map(); this.hover = null; this.alive = true;
     this.ro = new ResizeObserver(() => this.resize()); this.ro.observe(wrap);
     this.canvas.addEventListener("mousemove", (e) => this.onMove(e));
     this.canvas.addEventListener("mouseleave", () => { this.hover = null; hideTip(); this.canvas.classList.remove("hot"); });
@@ -571,185 +579,235 @@ class Orbit {
     const dpr = Math.min(2, devicePixelRatio || 1);
     this.canvas.width = Math.round(this.W * dpr); this.canvas.height = Math.round(this.H * dpr);
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    this.draw();
+    this.geometry(); this.draw();
   }
   setData(snap) {
     this.snap = snap; if (!snap) return;
     const bySys = {}; snap.nodes.forEach((n) => (bySys[n.system] = bySys[n.system] || []).push(n));
-    const used = new Set(snap.nodes.flatMap((n) => n.uses || []));
-    this.systems = SYSTEMS.filter((s) => s !== "n8n" && (bySys[s]?.length || used.has(s)));
+    Object.values(bySys).forEach((l) => l.sort((a, b) => shortName(a.name).localeCompare(shortName(b.name), "de")));
     this.bySys = bySys;
-    // Ereignisse aus dem Vergleich mit dem letzten Stand ableiten.
     if (this.prev.size && !REDUCED) {
       for (const n of snap.nodes) {
         const p = this.prev.get(n.id); if (!p) continue;
-        if (n.status === "running" && p.status !== "running") this.fx.push({ type: "comet", sys: n.system, dir: -1, t0: this.t, color: colors.run });
-        else if (p.status === "running" && n.status !== "running" || (n.lastRunAt !== p.lastRunAt && n.status !== "running")) {
-          this.fx.push({ type: "ripple", id: n.id, t0: this.t, color: n.status === "error" ? colors.err : colors.ok });
-          this.fx.push({ type: "comet", sys: n.system, dir: 1, t0: this.t, color: n.status === "error" ? colors.err : colors.sys[n.system] || colors.accent });
+        if (n.status === "running" && p.status !== "running") this.fx.push({ type: "ignite", id: n.id, t0: this.t });
+        else if ((p.status === "running" && n.status !== "running") || (n.lastRunAt !== p.lastRunAt && n.status !== "running")) {
+          const color = n.status === "error" ? colors.err : colors.ok;
+          this.fx.push({ type: "pulse", id: n.id, t0: this.t, color });
+          this.fx.push({ type: "wave", t0: this.t + 0.7, color });
         }
       }
     }
     this.prev = new Map(snap.nodes.map((n) => [n.id, { status: n.status, lastRunAt: n.lastRunAt }]));
+    this.geometry();
     const meta = $("#orbitMeta");
-    if (meta) meta.textContent = `${this.systems.length + 1} Systeme · ${snap.nodes.length} Workflows`;
+    if (meta) meta.textContent = `${this.sectors.length} Systeme · ${snap.nodes.length} Workflows`;
+    // Kompakte Systemliste (auf schmalen Bildschirmen statt der Ringbeschriftung)
+    const sl = $("#orbitSys");
+    if (sl) sl.innerHTML = this.sectors.map((sec) => {
+      const e = sec.list.filter((n) => n.status === "error").length;
+      return `<span style="--c:${sysVar(sec.s)}"><i></i>${SYS_NAME[sec.s]} <b class="num">${sec.list.length}</b>${e ? ` <em class="num">${e} Fehler</em>` : ""}</span>`;
+    }).join("");
   }
-  layout() {
-    const W = this.W, H = this.H, cx = W / 2, cy = H / 2;
-    const intro = REDUCED ? 1 : Math.min(1, (performance.now() - this.born) / 1400), ease = 1 - Math.pow(1 - intro, 4);
-    const rx = Math.max(80, Math.min(W * 0.38, W / 2 - (W < 600 ? 62 : 90))) * ease, ry = Math.max(70, Math.min(H * 0.36, H / 2 - 92)) * ease;
-    this.rx = rx; this.ry = ry;
-    this.hub = { x: cx, y: cy, r: Math.max(24, Math.min(36, Math.min(W, H) * 0.07)) };
-    this.sysPos = {};
-    const k = this.systems?.length || 0;
-    (this.systems || []).forEach((s, i) => {
-      const a = -Math.PI / 2 + (i / k) * Math.PI * 2 + Math.PI / k;
-      const cnt = this.bySys?.[s]?.length || 0;
-      this.sysPos[s] = { x: cx + Math.cos(a) * rx, y: cy + Math.sin(a) * ry, r: 13 + Math.sqrt(cnt) * 3.2, a };
+  geometry() {
+    const W = this.W, H = this.H; if (!W || !H) return;
+    const narrow = W < 560;
+    this.narrow = narrow;
+    this.cx = W / 2; this.cy = H / 2;
+    this.R = Math.max(70, Math.min(H / 2 - (narrow ? 30 : 48), W / 2 - (narrow ? 34 : 150)));
+    this.hubR = this.R * 0.2;
+    const used = new Set((this.snap?.nodes || []).flatMap((n) => n.uses || []));
+    const sys = SECTOR_ORDER.filter((s) => this.bySys?.[s]?.length || used.has(s));
+    const weights = sys.map((s) => Math.max(1.4, this.bySys?.[s]?.length || 0));
+    const gap = sys.length > 1 ? 0.07 : 0, total = weights.reduce((a, b) => a + b, 0) || 1;
+    const span = TAU - gap * sys.length;
+    let a = -Math.PI / 2 + gap / 2;
+    this.sectors = sys.map((s, i) => {
+      const w = (weights[i] / total) * span, sec = { s, a0: a, a1: a + w, mid: a + w / 2, list: this.bySys?.[s] || [] };
+      a += w + gap; return sec;
     });
-    this.sysPos.n8n = this.hub;
-    // Workflow-Punkte auf Umlaufbahnen um ihr System.
-    this.dots = [];
-    for (const [s, list] of Object.entries(this.bySys || {})) {
-      const c = this.sysPos[s]; if (!c) continue;
-      const perRing = s === "n8n" ? 10 : 8;
-      list.forEach((n, i) => {
-        const ring = Math.floor(i / perRing), idx = i % perRing, inRing = Math.min(perRing, list.length - ring * perRing);
-        const R = c.r + 14 + ring * 12;
-        const speed = (s === "n8n" ? 0.12 : 0.18) * (ring % 2 ? -1 : 1);
-        const a = (idx / inRing) * Math.PI * 2 + this.t * speed + (c.a || 0);
-        this.dots.push({ n, x: c.x + Math.cos(a) * R * ease, y: c.y + Math.sin(a) * R * ease });
+    this.cells = [];
+    const rc = this.R - 20;
+    for (const sec of this.sectors) {
+      const n = sec.list.length; if (!n) continue;
+      const step = (sec.a1 - sec.a0) / n;
+      sec.list.forEach((node, i) => {
+        const ang = sec.a0 + step * (i + 0.5);
+        this.cells.push({ n: node, ang, x: this.cx + Math.cos(ang) * rc, y: this.cy + Math.sin(ang) * rc, w: Math.min(9, step * rc * 0.62), sec });
       });
     }
+    this.cellOf = Object.fromEntries(this.cells.map((c) => [c.n.id, c]));
   }
   step(now) {
     const dt = Math.min(0.05, (now - this.last) / 1000); this.last = now;
     if (!REDUCED && !state.paused) this.t += dt;
-    this.fx = this.fx.filter((f) => this.t - f.t0 < 1.6);
+    this.fx = this.fx.filter((f) => this.t - f.t0 < 2.2);
     this.draw();
   }
-  curve(a, b, bend = 0.12) {
-    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2, dx = b.x - a.x, dy = b.y - a.y;
-    return { a, b, c: { x: mx - dy * bend, y: my + dx * bend } };
-  }
-  at(q, u) {
-    const v = 1 - u;
-    return { x: v * v * q.a.x + 2 * v * u * q.c.x + u * u * q.b.x, y: v * v * q.a.y + 2 * v * u * q.c.y + u * u * q.b.y };
-  }
   draw() {
-    const ctx = this.ctx, W = this.W, H = this.H; if (!W || !H) return;
+    const ctx = this.ctx, W = this.W, H = this.H; if (!W || !H || !this.R) return;
+    const C = colors, t = this.t, cx = this.cx, cy = this.cy, R = this.R;
+    const intro = REDUCED ? 1 : Math.min(1, (performance.now() - this.born) / 1600), ease = 1 - Math.pow(1 - intro, 3);
     ctx.clearRect(0, 0, W, H);
-    this.layout();
-    const C = colors, t = this.t, hub = this.hub;
-    // Führungsellipse
-    ctx.save(); ctx.setLineDash([2, 6]); ctx.strokeStyle = C.line; ctx.lineWidth = 1;
-    if (this.rx > 1) { ctx.beginPath(); ctx.ellipse(hub.x, hub.y, this.rx, this.ry, 0, 0, Math.PI * 2); ctx.stroke(); }
-    ctx.restore();
-    if (!this.snap) {
-      this.drawHub(C); ctx.fillStyle = C.muted; ctx.font = `500 13px ${getComputedStyle(document.body).fontFamily}`; ctx.textAlign = "center";
-      ctx.fillText(state.error ? "Keine Live-Daten" : "Lädt …", hub.x, hub.y + hub.r + 26); return;
+
+    // Instrumenten-Grund: Kernglühen, konzentrische Ringe, Skala
+    const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 1.15);
+    glow.addColorStop(0, rgba(C.sys.n8n, 0.16)); glow.addColorStop(0.55, rgba(C.accent, 0.05)); glow.addColorStop(1, rgba(C.accent, 0));
+    ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(cx, cy, R * 1.15, 0, TAU); ctx.fill();
+    ctx.lineWidth = 1;
+    for (const f of [0.42, 0.64]) { ctx.beginPath(); ctx.arc(cx, cy, R * f * ease, 0, TAU); ctx.strokeStyle = C.line; ctx.setLineDash([2, 5]); ctx.stroke(); }
+    ctx.setLineDash([]);
+    ctx.beginPath(); ctx.arc(cx, cy, (R - 20) * ease, 0, TAU); ctx.strokeStyle = C.line; ctx.stroke();
+    for (let i = 0; i < 120; i++) {
+      const a = (i / 120) * TAU, major = i % 10 === 0, r0 = R + 9, r1 = r0 + (major ? 7 : 3);
+      if (i / 120 > ease) break;
+      ctx.beginPath(); ctx.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0); ctx.lineTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1);
+      ctx.strokeStyle = major ? C["line-strong"] : C.line; ctx.stroke();
     }
-    // Verbindungen System → n8n mit Datenfluss-Partikeln
-    for (const s of this.systems) {
-      const p = this.sysPos[s], col = C.sys[s] || C.accent, q = this.curve(p, hub);
-      const list = this.bySys[s] || [];
-      const running = list.filter((n) => n.status === "running").length;
-      const recent = list.filter((n) => n.lastRunAt && Date.now() - new Date(n.lastRunAt) < 15 * 60e3).length;
-      ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.quadraticCurveTo(q.c.x, q.c.y, hub.x, hub.y);
-      ctx.strokeStyle = rgba(col, running ? 0.55 : list.length ? 0.28 : 0.12); ctx.lineWidth = running ? 2 : 1.2; ctx.stroke();
-      const nP = REDUCED ? 0 : Math.min(9, running * 3 + recent);
-      for (let i = 0; i < nP; i++) {
-        const u = (t * (0.18 + running * 0.08) + i / nP) % 1, pt = this.at(q, u);
-        ctx.beginPath(); ctx.arc(pt.x, pt.y, running ? 2.4 : 1.8, 0, Math.PI * 2);
-        ctx.fillStyle = rgba(col, 0.35 + 0.6 * Math.sin(u * Math.PI)); ctx.fill();
-      }
+
+    // Radar-Sweep
+    const sweep = normA(t * 0.7 - Math.PI / 2);
+    if (!REDUCED && this.snap && ctx.createConicGradient) {
+      const cg = ctx.createConicGradient(sweep - 0.9, cx, cy);
+      cg.addColorStop(0, rgba(C.accent, 0)); cg.addColorStop(0.143, rgba(C.accent, 0.16)); cg.addColorStop(0.1432, rgba(C.accent, 0)); cg.addColorStop(1, rgba(C.accent, 0));
+      ctx.fillStyle = cg; ctx.beginPath(); ctx.arc(cx, cy, R - 4, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(cx + Math.cos(sweep) * this.hubR, cy + Math.sin(sweep) * this.hubR); ctx.lineTo(cx + Math.cos(sweep) * (R - 4), cy + Math.sin(sweep) * (R - 4));
+      ctx.strokeStyle = rgba(C.accent, 0.5); ctx.lineWidth = 1.2; ctx.stroke();
     }
-    // Verifizierte Workflow-Kanten
-    const dotOf = Object.fromEntries(this.dots.map((d) => [d.n.id, d]));
-    for (const e of this.snap.edges || []) {
-      const a = dotOf[e.from], b = dotOf[e.to]; if (!a || !b) continue;
-      const q = this.curve(a, b, 0.25), act = a.n.status === "running";
-      ctx.save(); ctx.setLineDash([4, 5]); ctx.lineDashOffset = -t * 20;
-      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.quadraticCurveTo(q.c.x, q.c.y, b.x, b.y);
-      ctx.strokeStyle = rgba(C.accent, act ? 0.9 : 0.45); ctx.lineWidth = act ? 1.8 : 1.2; ctx.stroke(); ctx.restore();
-    }
-    // Hervorhebung: genutzte Systeme des gewählten/überfahrenen Workflows
-    const focusId = this.hover?.kind === "wf" ? this.hover.id : state.selected;
-    const fd = focusId && dotOf[focusId];
-    if (fd) for (const u of fd.n.uses || []) {
-      const p = this.sysPos[u]; if (!p) continue;
-      ctx.beginPath(); ctx.moveTo(fd.x, fd.y); ctx.lineTo(p.x, p.y);
-      ctx.strokeStyle = rgba(C.sys[u] || C.accent, 0.7); ctx.lineWidth = 1.5; ctx.setLineDash([3, 4]); ctx.stroke(); ctx.setLineDash([]);
-    }
-    // Kometen (Start: n8n → System, Abschluss: System → n8n)
-    for (const f of this.fx) if (f.type === "comet") {
-      const p = this.sysPos[f.sys]; if (!p || p === hub) continue;
-      const q = f.dir > 0 ? this.curve(p, hub) : this.curve(hub, p, -0.12);
-      const u = Math.min(1, (t - f.t0) / 1.1);
-      for (let k = 0; k < 10; k++) {
-        const uu = u - k * 0.025; if (uu < 0) break;
-        const pt = this.at(q, uu); ctx.beginPath(); ctx.arc(pt.x, pt.y, 4 - k * 0.32, 0, Math.PI * 2);
-        ctx.fillStyle = rgba(f.color, (1 - k / 10) * (1 - Math.max(0, u - 0.85) / 0.15)); ctx.fill();
-      }
-    }
-    // Systemknoten
-    for (const s of this.systems) {
-      const p = this.sysPos[s], col = C.sys[s] || C.accent, list = this.bySys[s] || [];
-      const running = list.some((n) => n.status === "running"), err = list.some((n) => n.status === "error");
-      const hot = this.hover?.kind === "sys" && this.hover.id === s;
+
+    if (!this.snap) { this.drawHub(C, 0, 0); ctx.fillStyle = C.muted; ctx.textAlign = "center"; ctx.font = `500 13px "Instrument Sans",system-ui,sans-serif`; ctx.fillText(state.error ? "Keine Live-Daten" : "Lädt …", cx, cy + this.hubR + 30); return; }
+
+    // Sektoren
+    const hovSec = this.hover?.kind === "sys" ? this.hover.id : null;
+    for (const sec of this.sectors) {
+      const col = C.sys[sec.s] || C.accent, has = sec.list.length > 0;
+      const a1 = sec.a0 + (sec.a1 - sec.a0) * ease;
+      const err = sec.list.some((n) => n.status === "error"), run = sec.list.some((n) => n.status === "running");
       ctx.save();
-      if (running || hot) { ctx.shadowColor = col; ctx.shadowBlur = 18 + (REDUCED ? 0 : 8 * Math.sin(t * 3)); }
-      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-      ctx.fillStyle = rgba(col, list.length ? 0.2 : 0.08); ctx.fill();
-      ctx.lineWidth = hot ? 2.5 : 1.5; ctx.strokeStyle = rgba(col, list.length ? 0.95 : 0.4); ctx.stroke();
+      if (run || hovSec === sec.s) { ctx.shadowColor = col; ctx.shadowBlur = 14 + (REDUCED ? 0 : 6 * Math.sin(t * 3)); }
+      ctx.beginPath(); ctx.arc(cx, cy, R, sec.a0, a1); ctx.lineCap = "round";
+      ctx.strokeStyle = rgba(col, has ? 0.95 : 0.35); ctx.lineWidth = hovSec === sec.s ? 8 : 6; ctx.stroke();
       ctx.restore();
-      ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(4, p.r * 0.34), 0, Math.PI * 2); ctx.fillStyle = rgba(col, list.length ? 1 : 0.4); ctx.fill();
-      if (err) { ctx.beginPath(); ctx.arc(p.x + p.r * 0.72, p.y - p.r * 0.72, 4.5, 0, Math.PI * 2); ctx.fillStyle = C.err; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = C.surface; ctx.stroke(); }
-      const rMax = p.r + 14 + (Math.ceil((list.length || 1) / 8) - 1) * 12 + 6;
-      const ly = p.y >= hub.y - 4 ? p.y + rMax + 14 : p.y - rMax - 22;
-      ctx.textAlign = "center"; ctx.fillStyle = C.text; ctx.font = `600 12.5px "Instrument Sans",system-ui,sans-serif`;
-      ctx.fillText(SYS_NAME[s], p.x, ly);
-      ctx.fillStyle = C.muted; ctx.font = `500 11px "JetBrains Mono",ui-monospace,monospace`;
-      ctx.fillText(list.length ? `${list.length} Workflow${list.length > 1 ? "s" : ""}` : "nicht genutzt", p.x, ly + 14);
-    }
-    this.drawHub(C);
-    // Workflow-Punkte
-    for (const d of this.dots) {
-      const st = d.n.status, col = { success: C.ok, error: C.err, running: C.run, waiting: C.warn }[st] || C.idle;
-      const hot = focusId === d.n.id, r = hot ? 6.5 : 4.6;
-      if (st === "running" || st === "error") {
-        const ph = REDUCED ? 0.5 : (t * (st === "running" ? 1.4 : 0.7)) % 1;
-        ctx.beginPath(); ctx.arc(d.x, d.y, r + 2 + ph * 10, 0, Math.PI * 2); ctx.strokeStyle = rgba(col, 0.6 * (1 - ph)); ctx.lineWidth = 1.5; ctx.stroke();
+      // zarte Sektorfläche bis zum Zellring
+      ctx.beginPath(); ctx.arc(cx, cy, R - 4, sec.a0, a1); ctx.arc(cx, cy, R - 36, a1, sec.a0, true); ctx.closePath();
+      ctx.fillStyle = rgba(col, hovSec === sec.s ? 0.14 : 0.06); ctx.fill();
+      // Beschriftung außen, zur Seite ausgerichtet
+      if (ease > 0.6 && !this.narrow) {
+        const lr = R + 26, lx = cx + Math.cos(sec.mid) * lr, ly = cy + Math.sin(sec.mid) * lr, c = Math.cos(sec.mid);
+        ctx.textAlign = c > 0.25 ? "left" : c < -0.25 ? "right" : "center";
+        const s = Math.sin(sec.mid), dy = s < -0.6 ? -8 : s > 0.6 ? 12 : 0;
+        ctx.globalAlpha = Math.min(1, (ease - 0.6) / 0.4);
+        ctx.fillStyle = C.text; ctx.font = `600 ${this.narrow ? 11.5 : 13}px "Instrument Sans",system-ui,sans-serif`;
+        ctx.fillText(SYS_NAME[sec.s], lx, ly + dy - 2);
+        ctx.fillStyle = err ? C.err : C.muted; ctx.font = `500 ${this.narrow ? 10 : 11}px "JetBrains Mono",ui-monospace,monospace`;
+        const cnt = sec.list.length, e = sec.list.filter((n) => n.status === "error").length;
+        ctx.fillText(cnt ? `${cnt} Workflow${cnt > 1 ? "s" : ""}${e ? ` · ${e} Fehler` : ""}` : "nicht genutzt", lx, ly + dy + 12);
+        ctx.globalAlpha = 1;
       }
-      ctx.beginPath(); ctx.arc(d.x, d.y, r, 0, Math.PI * 2);
-      if (st === "inactive") { ctx.lineWidth = 1.5; ctx.strokeStyle = C.idle; ctx.fillStyle = C.surface; ctx.fill(); ctx.stroke(); }
-      else { ctx.fillStyle = col; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = C.surface; ctx.stroke(); }
-      if (hot) { ctx.beginPath(); ctx.arc(d.x, d.y, r + 4, 0, Math.PI * 2); ctx.strokeStyle = C.text; ctx.lineWidth = 1.5; ctx.stroke(); }
     }
-    // Wellen bei abgeschlossenen Läufen
-    for (const f of this.fx) if (f.type === "ripple") {
-      const d = dotOf[f.id]; if (!d) continue;
-      const u = (t - f.t0) / 1.6;
-      ctx.beginPath(); ctx.arc(d.x, d.y, 6 + u * 34, 0, Math.PI * 2); ctx.strokeStyle = rgba(f.color, 0.8 * (1 - u)); ctx.lineWidth = 2.5 * (1 - u) + 0.5; ctx.stroke();
+
+    // Sehnen: verifizierte Workflow-Kanten durch das Innere
+    for (const e of this.snap.edges || []) {
+      const a = this.cellOf[e.from], b = this.cellOf[e.to]; if (!a || !b) continue;
+      const act = a.n.status === "running", k = 0.18;
+      ctx.save(); ctx.setLineDash([3, 5]); ctx.lineDashOffset = -t * 18;
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.quadraticCurveTo(cx + (a.x + b.x - 2 * cx) * k, cy + (a.y + b.y - 2 * cy) * k, b.x, b.y);
+      ctx.strokeStyle = rgba(C.accent, (act ? 0.9 : 0.4) * ease); ctx.lineWidth = act ? 1.8 : 1.2; ctx.stroke(); ctx.restore();
     }
+
+    // Lichtstrahlen laufender Workflows (Zelle → Kern)
+    for (const c of this.cells) if (c.n.status === "running") {
+      const x0 = cx + Math.cos(c.ang) * this.hubR, y0 = cy + Math.sin(c.ang) * this.hubR;
+      const g = ctx.createLinearGradient(c.x, c.y, x0, y0);
+      g.addColorStop(0, rgba(C.run, 0.75)); g.addColorStop(1, rgba(C.run, 0.05));
+      ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.lineTo(x0, y0); ctx.strokeStyle = g; ctx.lineWidth = 2; ctx.stroke();
+      if (!REDUCED) for (let i = 0; i < 2; i++) {
+        const u = (t * 0.9 + i / 2 + c.ang) % 1, px = c.x + (x0 - c.x) * u, py = c.y + (y0 - c.y) * u;
+        ctx.beginPath(); ctx.arc(px, py, 2.6, 0, TAU); ctx.fillStyle = rgba(C.run, 0.9 * (1 - u * 0.6)); ctx.fill();
+      }
+    }
+
+    // Abschluss-Pulse (Zelle → Kern) und Schockwellen vom Kern
+    for (const f of this.fx) {
+      if (f.type === "pulse") {
+        const c = this.cellOf[f.id]; if (!c) continue;
+        const u = Math.min(1, (t - f.t0) / 0.7); if (u >= 1) continue;
+        const x0 = cx + Math.cos(c.ang) * this.hubR, y0 = cy + Math.sin(c.ang) * this.hubR;
+        for (let k = 0; k < 8; k++) {
+          const uu = u - k * 0.03; if (uu < 0) break;
+          ctx.beginPath(); ctx.arc(c.x + (x0 - c.x) * uu, c.y + (y0 - c.y) * uu, 3.6 - k * 0.35, 0, TAU);
+          ctx.fillStyle = rgba(f.color, 1 - k / 8); ctx.fill();
+        }
+      } else if (f.type === "wave" && t >= f.t0) {
+        const u = (t - f.t0) / 1.4; if (u >= 1) continue;
+        ctx.beginPath(); ctx.arc(cx, cy, this.hubR + u * (R - 20 - this.hubR), 0, TAU);
+        ctx.strokeStyle = rgba(f.color, 0.55 * (1 - u)); ctx.lineWidth = 3 * (1 - u) + 0.5; ctx.stroke();
+      }
+    }
+
+    // Zellen
+    const focusId = this.hover?.kind === "wf" ? this.hover.id : state.selected;
+    const nCells = this.cells.length;
+    this.cells.forEach((c, i) => {
+      const appear = REDUCED ? 1 : Math.min(1, Math.max(0, (performance.now() - this.born - 500 - i * (900 / Math.max(1, nCells))) / 300));
+      if (!appear) return;
+      const st = c.n.status, col = { success: C.ok, error: C.err, running: C.run, waiting: C.warn }[st] || C.idle;
+      const hot = focusId === c.n.id;
+      const lit = !REDUCED && Math.abs(((normA(c.ang) - sweep + Math.PI * 3) % TAU) - Math.PI) < 0.14;
+      const len = (hot ? 20 : 16) * appear, wid = hot ? c.w + 2 : c.w;
+      ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(c.ang);
+      if (st === "running" || st === "error" || hot || lit) { ctx.shadowColor = col; ctx.shadowBlur = st === "error" ? 10 + 6 * Math.sin(t * 4) : 14; }
+      ctx.beginPath(); ctx.roundRect ? ctx.roundRect(-len / 2, -wid / 2, len, wid, wid / 2) : ctx.rect(-len / 2, -wid / 2, len, wid);
+      if (st === "inactive") { ctx.fillStyle = C.surface; ctx.fill(); ctx.lineWidth = 1.3; ctx.strokeStyle = C.idle; ctx.stroke(); }
+      else { ctx.fillStyle = lit && st !== "error" ? rgba(col, 1) : rgba(col, st === "idle" ? 0.6 : 0.92); ctx.fill(); }
+      if (hot) { ctx.lineWidth = 1.5; ctx.strokeStyle = C.text; ctx.stroke(); }
+      ctx.restore();
+      if (hot) for (const u of c.n.uses || []) {
+        const sec = this.sectors.find((s) => s.s === u); if (!sec || sec === c.sec) continue;
+        const tx = cx + Math.cos(sec.mid) * (R - 4), ty = cy + Math.sin(sec.mid) * (R - 4);
+        ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.quadraticCurveTo(cx, cy, tx, ty);
+        ctx.strokeStyle = rgba(C.sys[u] || C.accent, 0.8); ctx.lineWidth = 1.5; ctx.setLineDash([3, 4]); ctx.stroke(); ctx.setLineDash([]);
+      }
+    });
+    // Zünd-Blitz beim Start eines Laufs
+    for (const f of this.fx) if (f.type === "ignite") {
+      const c = this.cellOf[f.id]; if (!c) continue;
+      const u = (t - f.t0) / 0.9; if (u >= 1) continue;
+      ctx.beginPath(); ctx.arc(c.x, c.y, 6 + u * 26, 0, TAU); ctx.strokeStyle = rgba(C.run, 0.8 * (1 - u)); ctx.lineWidth = 2; ctx.stroke();
+    }
+
+    const running = this.snap.nodes.filter((n) => n.status === "running").length;
+    this.drawHub(C, running, ease);
   }
-  drawHub(C) {
-    const ctx = this.ctx, h = this.hub, t = this.t;
-    const breath = REDUCED ? 0 : Math.sin(t * 1.6) * 0.5 + 0.5;
-    const g = ctx.createRadialGradient(h.x, h.y, h.r * 0.4, h.x, h.y, h.r * 2.6);
-    g.addColorStop(0, rgba(C.sys.n8n, 0.35 + 0.15 * breath)); g.addColorStop(1, rgba(C.sys.n8n, 0));
-    ctx.beginPath(); ctx.arc(h.x, h.y, h.r * 2.6, 0, Math.PI * 2); ctx.fillStyle = g; ctx.fill();
-    ctx.beginPath(); ctx.arc(h.x, h.y, h.r, 0, Math.PI * 2); ctx.fillStyle = C.sys.n8n; ctx.fill();
-    ctx.lineWidth = 3; ctx.strokeStyle = rgba(C.sys.n8n, 0.35); ctx.beginPath(); ctx.arc(h.x, h.y, h.r + 5 + breath * 2, 0, Math.PI * 2); ctx.stroke();
+  drawHub(C, running, ease = 1) {
+    const ctx = this.ctx, cx = this.cx, cy = this.cy, r = this.hubR * (0.6 + 0.4 * ease), t = this.t;
+    const breath = REDUCED ? 0.5 : Math.sin(t * 1.6) * 0.5 + 0.5;
+    const g = ctx.createRadialGradient(cx, cy, r * 0.3, cx, cy, r * 2.4);
+    g.addColorStop(0, rgba(C.sys.n8n, 0.45 + 0.15 * breath)); g.addColorStop(1, rgba(C.sys.n8n, 0));
+    ctx.beginPath(); ctx.arc(cx, cy, r * 2.4, 0, TAU); ctx.fillStyle = g; ctx.fill();
+    // rotierender Energiering
+    if (ctx.createConicGradient) {
+      const cg = ctx.createConicGradient(REDUCED ? 0 : t * 1.4, cx, cy);
+      cg.addColorStop(0, rgba(C.sys.n8n, 0)); cg.addColorStop(0.7, rgba(C.sys.n8n, 0.2)); cg.addColorStop(1, rgba(C.sys.n8n, 1));
+      ctx.beginPath(); ctx.arc(cx, cy, r + 7, 0, TAU); ctx.strokeStyle = cg; ctx.lineWidth = 3; ctx.stroke();
+    }
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.fillStyle = C.sys.n8n; ctx.fill();
     ctx.fillStyle = "#ffffff"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.font = `700 ${Math.round(h.r * 0.62)}px "Bricolage Grotesque",system-ui,sans-serif`; ctx.fillText("n8n", h.x, h.y + 1);
+    ctx.font = `700 ${Math.round(r * 0.56)}px "Bricolage Grotesque",system-ui,sans-serif`;
+    ctx.fillText("n8n", cx, cy - (running ? r * 0.14 : 0));
+    if (running) { ctx.font = `600 ${Math.max(9, Math.round(r * 0.22))}px "JetBrains Mono",ui-monospace,monospace`; ctx.fillStyle = "rgba(255,255,255,.85)"; ctx.fillText(`${running} aktiv`, cx, cy + r * 0.34); }
     ctx.textBaseline = "alphabetic";
   }
   onMove(e) {
     const r = this.canvas.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
-    let best = null, bd = 13;
-    for (const d of this.dots) { const dd = Math.hypot(d.x - x, d.y - y); if (dd < bd) { bd = dd; best = { kind: "wf", id: d.n.id, n: d.n }; } }
-    if (!best) for (const s of [...(this.systems || []), "n8n"]) { const p = this.sysPos[s]; if (p && Math.hypot(p.x - x, p.y - y) < p.r + 4) best = { kind: "sys", id: s }; }
+    let best = null, bd = 12;
+    for (const c of this.cells) { const d = Math.hypot(c.x - x, c.y - y); if (d < bd) { bd = d; best = { kind: "wf", id: c.n.id, n: c.n }; } }
+    if (!best) {
+      const d = Math.hypot(x - this.cx, y - this.cy), a = normA(Math.atan2(y - this.cy, x - this.cx));
+      if (d > this.R - 40 && d < this.R + 60) for (const sec of this.sectors) {
+        const a0 = normA(sec.a0), w = sec.a1 - sec.a0;
+        if (normA(a - a0) <= w) { best = { kind: "sys", id: sec.s }; break; }
+      }
+    }
     this.hover = best; this.canvas.classList.toggle("hot", best?.kind === "wf");
     if (!best) { hideTip(); return; }
     if (best.kind === "wf") {
@@ -758,7 +816,7 @@ class Orbit {
         <div class="row"><span>System</span><span>${SYS_NAME[n.system]}</span></div><div class="row"><span>Letzter Lauf</span><span>${rel(n.lastRunAt)}</span></div>
         <div class="row" style="margin-top:4px"><span>Klicken für Details</span><span></span></div>`);
     } else {
-      const list = this.bySys[best.id] || [], cnt = (st) => list.filter((n) => n.status === st).length;
+      const list = this.bySys?.[best.id] || [], cnt = (st) => list.filter((n) => n.status === st).length;
       showTip(e, `<b>${SYS_NAME[best.id]}</b><div class="row"><span>Workflows</span><span class="num">${list.length}</span></div>
         <div class="row"><span>Laufen gerade</span><span class="num">${cnt("running")}</span></div><div class="row"><span>Mit Fehler</span><span class="num">${cnt("error")}</span></div>`);
     }

@@ -22,8 +22,9 @@ live-dashboard ──(SSE /events)──> Browser   (Push bei jedem Poll)
 
 ## Oberfläche: Prozess-Cockpit
 - **Cockpit**: Lagebild mit 24-h-Erfolgsquote und Status-Satz, Kennzahlen mit Sparklines,
-  **Orbit-Systemkarte** (n8n im Zentrum, Workflows kreisen um ihr System, Partikel
-  zeigen den Datenfluss, neue Läufe starten als Komet, Abschlüsse lösen eine Welle aus),
+  **Radial-Leitstand** (n8n im Kern, jedes System ein fester Ringsektor, Workflows als
+  geordnete Zellen; Radar-Sweep, Lichtstrahlen laufender Prozesse, Puls und Schockwelle
+  bei Abschlüssen, Workflow-Kanten als Sehnen),
   Live-Feed der letzten Ausführungen, 24-h-Zeitleiste, „Braucht Aufmerksamkeit" und „Aktivste Workflows".
 - **Workflows**: Suche, Filter nach System und Status, sortierbare Tabelle.
 - **Detail-Schublade** je Workflow mit Verbindungen, letzten Läufen und Link nach n8n.

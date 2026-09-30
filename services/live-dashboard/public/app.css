@@ -128,6 +128,12 @@ kbd{font:600 10.5px var(--f-data);padding:1px 6px;border-radius:5px;border:1px s
 
 .hero{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,2fr);gap:16px}
 .pulse-card{display:grid;grid-template-columns:auto minmax(0,1fr);gap:22px;align-items:center;padding:22px 24px;overflow:hidden}
+@property --ang{syntax:"<angle>";inherits:false;initial-value:0deg}
+.pulse-card::before{content:"";position:absolute;inset:-1px;border-radius:inherit;padding:1.5px;pointer-events:none;
+  background:conic-gradient(from var(--ang),transparent 0 62%,var(--tone,var(--accent)) 82%,transparent 100%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0);
+  animation:ang 5s linear infinite}
+@keyframes ang{to{--ang:360deg}}
 .pulse-card::after{content:"";position:absolute;inset:auto -30% -60% auto;width:70%;aspect-ratio:1;border-radius:50%;background:radial-gradient(circle,var(--tone-soft,var(--accent-soft)),transparent 70%);pointer-events:none}
 .ring{position:relative;width:132px;height:132px;flex:none}
 .ring svg{width:100%;height:100%;transform:rotate(-90deg)}
@@ -154,21 +160,26 @@ kbd{font:600 10.5px var(--f-data);padding:1px 6px;border-radius:5px;border:1px s
 .kpi.flash{animation:flash 1s var(--ease)}
 @keyframes flash{30%{border-color:var(--tone,var(--accent));box-shadow:0 0 0 4px color-mix(in srgb,var(--tone,var(--accent)) 18%,transparent)}}
 
-.stage{display:grid;grid-template-columns:minmax(0,2fr) minmax(320px,1fr);gap:16px}
-.orbit-card{display:flex;flex-direction:column;min-height:540px;overflow:hidden}
-.orbit-wrap{position:relative;flex:1;min-height:440px}
+.stage{display:grid;grid-template-columns:minmax(0,2fr) minmax(320px,1fr);grid-template-rows:minmax(600px,64vh);gap:16px}
+.orbit-card{display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.orbit-wrap{position:relative;flex:1;min-height:0}
 .orbit-wrap canvas{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:default}
 .orbit-wrap canvas.hot{cursor:pointer}
 .orbit-legend{display:flex;flex-wrap:wrap;gap:6px 14px;padding:0 18px 14px;font-size:11.5px;color:var(--muted)}
 .orbit-legend span{display:inline-flex;align-items:center;gap:6px}
-.orbit-legend i{width:9px;height:9px;border-radius:50%;display:inline-block}
+.orbit-legend i{width:14px;height:6px;border-radius:3px;display:inline-block}
 .orbit-legend i.ring-i{background:transparent!important;border:1.5px solid var(--idle)}
+.orbit-sys{display:none;flex-wrap:wrap;gap:6px 14px;padding:0 18px 10px;font-size:12px}
+.orbit-sys span{display:inline-flex;align-items:center;gap:6px}
+.orbit-sys i{width:14px;height:6px;border-radius:3px;background:var(--c)}
+.orbit-sys b{font-weight:600;color:var(--muted)}
+.orbit-sys em{font-style:normal;color:var(--err)}
 .tip{position:fixed;z-index:60;pointer-events:none;padding:9px 11px;border-radius:12px;background:var(--surface-3);border:1px solid var(--line-strong);box-shadow:var(--shadow);font-size:12px;max-width:280px;transform:translate(12px,12px)}
 .tip b{display:block;font-size:12.5px;margin-bottom:3px}
 .tip .row{display:flex;gap:10px;justify-content:space-between;color:var(--muted)}
 .tip .row span:last-child{color:var(--text)}
 
-.feed-card{display:flex;flex-direction:column;max-height:620px;min-height:0}
+.feed-card{display:flex;flex-direction:column;min-height:0;overflow:hidden}
 .feed{list-style:none;margin:0;padding:10px 10px 12px;overflow:auto;flex:1;display:grid;align-content:start;gap:2px}
 .feed li{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 8px;border-radius:12px;cursor:pointer;transition:background .2s}
 .feed li:hover{background:var(--surface-2)}
@@ -185,9 +196,10 @@ kbd{font:600 10.5px var(--f-data);padding:1px 6px;border-radius:5px;border:1px s
 .feed-r .num{display:block;color:var(--text);font-size:11.5px}
 .empty{padding:28px 18px;text-align:center;color:var(--muted);font-size:13px}
 
-.lower{display:grid;grid-template-columns:minmax(0,2fr) minmax(320px,1fr);gap:16px;align-items:start}
-.chart{padding:8px 18px 16px}
-.chart svg{width:100%;height:210px;display:block;overflow:visible}
+.lower{display:grid;grid-template-columns:minmax(0,2fr) minmax(320px,1fr);gap:16px}
+.lower>.card{display:flex;flex-direction:column}
+.chart{position:relative;flex:1;min-height:236px;padding:8px 18px 16px}
+.chart svg{position:absolute;left:18px;right:18px;top:8px;width:calc(100% - 36px);display:block;overflow:visible}
 .chart .grid line{stroke:var(--line);stroke-width:1}
 .chart text{fill:var(--muted);font:11px var(--f-data)}
 .chart .bar-hit{fill:transparent}
@@ -287,7 +299,7 @@ kbd{font:600 10.5px var(--f-data);padding:1px 6px;border-radius:5px;border:1px s
 /* ── Responsiv ────────────────────────────────────────────────────────── */
 @media (max-width:1180px){
   .hero,.stage,.lower{grid-template-columns:minmax(0,1fr)}
-  .feed-card{max-height:460px}
+  .stage{grid-template-rows:minmax(560px,auto) 460px}
 }
 @media (max-width:760px){
   .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -300,8 +312,9 @@ kbd{font:600 10.5px var(--f-data);padding:1px 6px;border-radius:5px;border:1px s
   .tabs{order:10;width:100%}
   .tab{flex:1}
   .live .live-txt{display:none}
-  .orbit-card{min-height:420px}
-  .orbit-wrap{min-height:400px}
+  .stage{grid-template-rows:500px 460px}
+  .orbit-sys{display:flex}
+  .orbit-wrap{min-height:0}
   .wf-table thead{display:none}
   .wf-table,.wf-table tbody,.wf-table tr,.wf-table td{display:block;width:100%}
   .wf-table tr{padding:10px 4px;border-bottom:1px solid var(--line)}
