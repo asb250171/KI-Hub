@@ -660,13 +660,13 @@ class Radial {
       a += w + gap; return sec;
     });
     this.cells = [];
-    const rc = this.R - 20;
+    const rc = this.R - 24;
     for (const sec of this.sectors) {
       const n = sec.list.length; if (!n) continue;
       const step = (sec.a1 - sec.a0) / n;
       sec.list.forEach((node, i) => {
         const ang = sec.a0 + step * (i + 0.5);
-        this.cells.push({ n: node, ang, x: this.cx + Math.cos(ang) * rc, y: this.cy + Math.sin(ang) * rc, w: Math.min(9, step * rc * 0.62), sec });
+        this.cells.push({ n: node, ang, x: this.cx + Math.cos(ang) * rc, y: this.cy + Math.sin(ang) * rc, w: Math.max(6, Math.min(this.narrow ? 9 : 12, step * rc * 0.6)), sec });
       });
     }
     this.cellOf = Object.fromEntries(this.cells.map((c) => [c.n.id, c]));
@@ -685,6 +685,15 @@ class Radial {
   step(now) {
     const dt = Math.min(0.05, (now - this.last) / 1000); this.last = now;
     if (!REDUCED && !state.paused) this.t += dt;
+    // Immer Blitze: reihum in die Workflows der letzten Live-Aktivitäten
+    if (!REDUCED && !state.paused && this.snap && this.t >= (this.nextAmbient ?? 1.8)) {
+      const rec = (this.snap.recent || []).filter((r) => this.cellOf?.[r.workflowId]).slice(0, 6);
+      if (rec.length) {
+        const r = rec[(this.ambientIdx = ((this.ambientIdx ?? -1) + 1) % rec.length)];
+        this.strike(r.workflowId, { success: colors.ok, error: colors.err, running: colors.run, waiting: colors.warn }[r.status] || colors.idle);
+      }
+      this.nextAmbient = this.t + 2.2;
+    }
     this.fx = this.fx.filter((f) => this.t - f.t0 < 2.2);
     this.draw();
   }
@@ -805,12 +814,12 @@ class Radial {
       const st = c.n.status, col = { success: C.ok, error: C.err, running: C.run, waiting: C.warn }[st] || C.idle;
       const hot = focusId === c.n.id;
       const lit = !REDUCED && Math.abs(((normA(c.ang) - sweep + Math.PI * 3) % TAU) - Math.PI) < 0.14;
-      const len = (hot ? 20 : 16) * appear, wid = hot ? c.w + 2 : c.w;
+      const len = (hot ? 32 : this.narrow ? 20 : 27) * appear, wid = hot ? c.w + 2 : c.w;
       ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(c.ang);
       if (st === "running" || st === "error" || hot || lit) { ctx.shadowColor = col; ctx.shadowBlur = st === "error" ? 10 + 6 * Math.sin(t * 4) : 14; }
       ctx.beginPath(); ctx.roundRect ? ctx.roundRect(-len / 2, -wid / 2, len, wid, wid / 2) : ctx.rect(-len / 2, -wid / 2, len, wid);
       if (st === "inactive") { ctx.fillStyle = C.surface; ctx.fill(); ctx.lineWidth = 1.3; ctx.strokeStyle = C.idle; ctx.stroke(); }
-      else { ctx.fillStyle = lit && st !== "error" ? rgba(col, 1) : rgba(col, st === "idle" ? 0.6 : 0.92); ctx.fill(); }
+      else { ctx.fillStyle = col; ctx.fill(); if (lit) { ctx.fillStyle = "rgba(255,255,255,.25)"; ctx.fill(); } }
       if (hot) { ctx.lineWidth = 1.5; ctx.strokeStyle = C.text; ctx.stroke(); }
       ctx.restore();
       if (hot) for (const u of c.n.uses || []) {
