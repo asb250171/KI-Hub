@@ -573,6 +573,20 @@ function hideTip() { $("#tip").hidden = true; }
 const SECTOR_ORDER = ["hubspot", "claude", "openai", "m365", "monday", "stripe", "extern", "n8n"];
 const TAU = Math.PI * 2;
 // Im Ring steht das System bereits am Sektor — System-Präfixe im Namen weglassen.
+// Kurzname für die Pills im Ring: ohne System-Präfix, Klammern und Füllwörter,
+// höchstens `max` Zeichen, an Wortgrenzen gekürzt.
+const FILLER = new Set(["und", "für", "der", "die", "das", "je", "von", "zu", "mit", "im", "in", "&", "–", "-", "→"]);
+function pillName(name, max) {
+  const words = ringName(name).replace(/^(KI-Agent|Dashboard API|Archiv)\s*[-–]?\s*/i, "").replace(/\([^)]*\)/g, "").split(/\s+/).filter((w) => w && !FILLER.has(w.toLowerCase()));
+  let out = "";
+  for (const w of words) {
+    const next = out ? `${out} ${w}` : w;
+    if (next.length > max) break;
+    out = next;
+  }
+  if (!out) out = words[0] ? words[0].slice(0, max - 1) + "…" : "";
+  return out;
+}
 const ringName = (n) => String(n).replace(/^(P8NEX|HubSpot|monday\.com|Stripe|SharePoint|Outlook|Microsoft 365|n8n)\s*[-–]\s*/i, "");
 const normA = (a) => ((a % TAU) + TAU) % TAU;
 
@@ -669,22 +683,23 @@ class Radial {
         this.stars.push({ x, y, r: 0.4 + rnd() * 1.1, ph: rnd() * TAU, sp: 0.6 + rnd() * 1.6 });
       }
     }
-    // Zellbeschriftungen: strahlenförmig vom Zellring nach innen, gekürzt auf den verfügbaren Platz.
-    this.labelR = this.R - 33;
-    this.labelFont = `500 ${narrow ? 9 : 11}px "Instrument Sans",system-ui,sans-serif`;
-    this.innerR = this.hubR * (narrow ? 1.4 : 1.6);
-    const maxW = this.labelR - this.innerR - 6;
+    // Zell-Pills: kurzer Name in einer statusfarbenen Kapsel, strahlenförmig nach innen.
+    this.labelR = this.R - 32;
+    this.pillH = narrow ? 14 : 19;
+    this.pillPad = narrow ? 5 : 8;
+    const fpx = narrow ? 8.5 : this.R < 200 ? 9.5 : 11;
+    this.labelFont = `600 ${fpx}px "Instrument Sans",system-ui,sans-serif`;
+    this.innerR = this.hubR * (narrow || this.R < 200 ? 1.35 : 1.6);
+    const maxW = this.labelR - this.innerR - 8 - this.pillPad * 2;
+    const maxChars = Math.max(6, Math.min(20, Math.floor(maxW / (fpx * 0.56))));
     const ctx = this.ctx; ctx.font = this.labelFont;
     for (const c of this.cells) {
       const spacing = ((c.sec.a1 - c.sec.a0) / c.sec.list.length) * this.labelR;
       c.label = null; c.labelW = 0;
-      if (spacing < (narrow ? 10 : 12) || maxW < 40) continue;
-      let txt = ringName(c.n.name);
-      if (ctx.measureText(txt).width > maxW) {
-        while (txt.length > 3 && ctx.measureText(txt + "…").width > maxW) txt = txt.slice(0, -1);
-        txt = txt.trimEnd() + "…";
-      }
-      c.label = txt; c.labelW = ctx.measureText(txt).width;
+      if (spacing < this.pillH + 2 || maxW < 36) continue;
+      let txt = pillName(c.n.name, maxChars);
+      while (txt.length > 3 && ctx.measureText(txt).width > maxW) txt = txt.slice(0, -2) + "…";
+      c.label = txt; c.labelW = ctx.measureText(txt).width + this.pillPad * 2;
     }
   }
   step(now) {
@@ -780,7 +795,7 @@ class Radial {
 
     // Lichtstrahlen laufender Workflows (Zelle → Kern)
     for (const c of this.cells) if (c.n.status === "running") {
-      const rs = c.label ? this.labelR - c.labelW - 8 : this.R - 30;
+      const rs = c.label ? this.labelR - c.labelW - 6 : this.R - 30;
       const sx = cx + Math.cos(c.ang) * rs, sy = cy + Math.sin(c.ang) * rs;
       const x0 = cx + Math.cos(c.ang) * this.hubR, y0 = cy + Math.sin(c.ang) * this.hubR;
       const g = ctx.createLinearGradient(sx, sy, x0, y0);
@@ -797,7 +812,7 @@ class Radial {
       if (f.type === "pulse") {
         const c = this.cellOf[f.id]; if (!c) continue;
         const u = Math.min(1, (t - f.t0) / 0.7); if (u >= 1) continue;
-        const rs = c.label ? this.labelR - c.labelW - 8 : this.R - 30;
+        const rs = c.label ? this.labelR - c.labelW - 6 : this.R - 30;
         const sx = cx + Math.cos(c.ang) * rs, sy = cy + Math.sin(c.ang) * rs;
         const x0 = cx + Math.cos(c.ang) * this.hubR, y0 = cy + Math.sin(c.ang) * this.hubR;
         for (let k = 0; k < 8; k++) {
@@ -830,15 +845,26 @@ class Radial {
       if (hot) { ctx.lineWidth = 1.5; ctx.strokeStyle = C.text; ctx.stroke(); }
       ctx.restore();
       if (c.label) {
-        const right = Math.cos(c.ang) >= 0;
+        const right = Math.cos(c.ang) >= 0, w = c.labelW, h = this.pillH;
         ctx.save();
         ctx.translate(cx + Math.cos(c.ang) * this.labelR, cy + Math.sin(c.ang) * this.labelR);
         ctx.rotate(right ? c.ang : c.ang + Math.PI);
-        ctx.textAlign = right ? "right" : "left"; ctx.textBaseline = "middle";
-        ctx.font = hot ? this.labelFont.replace(/^500/, "700") : this.labelFont;
         ctx.globalAlpha = appear;
-        ctx.fillStyle = hot ? C.text : st === "running" ? C.run : st === "error" ? C.err : lit ? C.text : C.muted;
-        ctx.fillText(c.label, 0, 0.5);
+        const x0 = right ? -w : 0;
+        const inactive = st === "inactive", idle = st === "idle" || inactive;
+        // Kapsel: Statusfarbe als Tönung, kräftiger Rand bei Fehler/Lauf/Hover
+        if (st === "running" || st === "error") { ctx.shadowColor = col; ctx.shadowBlur = st === "error" ? 8 + 4 * Math.sin(t * 4) : 12; }
+        ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x0, -h / 2, w, h, h / 2) : ctx.rect(x0, -h / 2, w, h);
+        ctx.fillStyle = idle ? rgba(C["surface-3"] || C.surface, 0.9) : rgba(col, hot || lit ? 0.34 : st === "success" ? 0.16 : 0.24);
+        ctx.fill(); ctx.shadowBlur = 0;
+        ctx.lineWidth = hot ? 1.6 : 1;
+        ctx.strokeStyle = hot ? C.text : inactive ? C.idle : rgba(col, st === "success" ? 0.45 : 0.8);
+        if (inactive) ctx.setLineDash([3, 3]);
+        ctx.stroke(); ctx.setLineDash([]);
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.font = this.labelFont;
+        ctx.fillStyle = idle ? C.muted : C.text;
+        ctx.fillText(c.label, x0 + w / 2, 0.5);
         ctx.restore();
       }
       if (hot) for (const u of c.n.uses || []) {
