@@ -552,6 +552,8 @@ function hideTip() { $("#tip").hidden = true; }
 // durch das Innere.
 const SECTOR_ORDER = ["hubspot", "claude", "openai", "m365", "monday", "stripe", "extern", "n8n"];
 const TAU = Math.PI * 2;
+// Im Ring steht das System bereits am Sektor — System-Präfixe im Namen weglassen.
+const ringName = (n) => String(n).replace(/^(P8NEX|HubSpot|monday\.com|Stripe|SharePoint|Outlook|Microsoft 365|n8n)\s*[-–]\s*/i, "");
 const normA = (a) => ((a % TAU) + TAU) % TAU;
 
 class Radial {
@@ -614,7 +616,7 @@ class Radial {
     this.narrow = narrow;
     this.cx = W / 2; this.cy = H / 2;
     this.R = Math.max(70, Math.min(H / 2 - (narrow ? 30 : 48), W / 2 - (narrow ? 34 : 150)));
-    this.hubR = this.R * 0.2;
+    this.hubR = this.R * 0.17;
     const used = new Set((this.snap?.nodes || []).flatMap((n) => n.uses || []));
     const sys = SECTOR_ORDER.filter((s) => this.bySys?.[s]?.length || used.has(s));
     const weights = sys.map((s) => Math.max(1.4, this.bySys?.[s]?.length || 0));
@@ -636,6 +638,23 @@ class Radial {
       });
     }
     this.cellOf = Object.fromEntries(this.cells.map((c) => [c.n.id, c]));
+    // Zellbeschriftungen: strahlenförmig vom Zellring nach innen, gekürzt auf den verfügbaren Platz.
+    this.labelR = this.R - 33;
+    this.labelFont = `500 ${narrow ? 9 : 11}px "Instrument Sans",system-ui,sans-serif`;
+    this.innerR = this.hubR * (narrow ? 1.4 : 1.6);
+    const maxW = this.labelR - this.innerR - 6;
+    const ctx = this.ctx; ctx.font = this.labelFont;
+    for (const c of this.cells) {
+      const spacing = ((c.sec.a1 - c.sec.a0) / c.sec.list.length) * this.labelR;
+      c.label = null; c.labelW = 0;
+      if (spacing < (narrow ? 10 : 12) || maxW < 40) continue;
+      let txt = ringName(c.n.name);
+      if (ctx.measureText(txt).width > maxW) {
+        while (txt.length > 3 && ctx.measureText(txt + "…").width > maxW) txt = txt.slice(0, -1);
+        txt = txt.trimEnd() + "…";
+      }
+      c.label = txt; c.labelW = ctx.measureText(txt).width;
+    }
   }
   step(now) {
     const dt = Math.min(0.05, (now - this.last) / 1000); this.last = now;
@@ -654,7 +673,7 @@ class Radial {
     glow.addColorStop(0, rgba(C.sys.n8n, 0.16)); glow.addColorStop(0.55, rgba(C.accent, 0.05)); glow.addColorStop(1, rgba(C.accent, 0));
     ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(cx, cy, R * 1.15, 0, TAU); ctx.fill();
     ctx.lineWidth = 1;
-    for (const f of [0.42, 0.64]) { ctx.beginPath(); ctx.arc(cx, cy, R * f * ease, 0, TAU); ctx.strokeStyle = C.line; ctx.setLineDash([2, 5]); ctx.stroke(); }
+    ctx.beginPath(); ctx.arc(cx, cy, (this.innerR || this.hubR * 1.6) * ease, 0, TAU); ctx.strokeStyle = C.line; ctx.setLineDash([2, 5]); ctx.stroke();
     ctx.setLineDash([]);
     ctx.beginPath(); ctx.arc(cx, cy, (R - 20) * ease, 0, TAU); ctx.strokeStyle = C.line; ctx.stroke();
     for (let i = 0; i < 120; i++) {
@@ -716,12 +735,14 @@ class Radial {
 
     // Lichtstrahlen laufender Workflows (Zelle → Kern)
     for (const c of this.cells) if (c.n.status === "running") {
+      const rs = c.label ? this.labelR - c.labelW - 8 : this.R - 30;
+      const sx = cx + Math.cos(c.ang) * rs, sy = cy + Math.sin(c.ang) * rs;
       const x0 = cx + Math.cos(c.ang) * this.hubR, y0 = cy + Math.sin(c.ang) * this.hubR;
-      const g = ctx.createLinearGradient(c.x, c.y, x0, y0);
-      g.addColorStop(0, rgba(C.run, 0.75)); g.addColorStop(1, rgba(C.run, 0.05));
-      ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.lineTo(x0, y0); ctx.strokeStyle = g; ctx.lineWidth = 2; ctx.stroke();
+      const g = ctx.createLinearGradient(sx, sy, x0, y0);
+      g.addColorStop(0, rgba(C.run, 0.85)); g.addColorStop(1, rgba(C.run, 0.1));
+      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(x0, y0); ctx.strokeStyle = g; ctx.lineWidth = 2; ctx.stroke();
       if (!REDUCED) for (let i = 0; i < 2; i++) {
-        const u = (t * 0.9 + i / 2 + c.ang) % 1, px = c.x + (x0 - c.x) * u, py = c.y + (y0 - c.y) * u;
+        const u = (t * 1.2 + i / 2 + c.ang) % 1, px = sx + (x0 - sx) * u, py = sy + (y0 - sy) * u;
         ctx.beginPath(); ctx.arc(px, py, 2.6, 0, TAU); ctx.fillStyle = rgba(C.run, 0.9 * (1 - u * 0.6)); ctx.fill();
       }
     }
@@ -731,10 +752,12 @@ class Radial {
       if (f.type === "pulse") {
         const c = this.cellOf[f.id]; if (!c) continue;
         const u = Math.min(1, (t - f.t0) / 0.7); if (u >= 1) continue;
+        const rs = c.label ? this.labelR - c.labelW - 8 : this.R - 30;
+        const sx = cx + Math.cos(c.ang) * rs, sy = cy + Math.sin(c.ang) * rs;
         const x0 = cx + Math.cos(c.ang) * this.hubR, y0 = cy + Math.sin(c.ang) * this.hubR;
         for (let k = 0; k < 8; k++) {
           const uu = u - k * 0.03; if (uu < 0) break;
-          ctx.beginPath(); ctx.arc(c.x + (x0 - c.x) * uu, c.y + (y0 - c.y) * uu, 3.6 - k * 0.35, 0, TAU);
+          ctx.beginPath(); ctx.arc(sx + (x0 - sx) * uu, sy + (y0 - sy) * uu, 3.6 - k * 0.35, 0, TAU);
           ctx.fillStyle = rgba(f.color, 1 - k / 8); ctx.fill();
         }
       } else if (f.type === "wave" && t >= f.t0) {
@@ -761,6 +784,18 @@ class Radial {
       else { ctx.fillStyle = lit && st !== "error" ? rgba(col, 1) : rgba(col, st === "idle" ? 0.6 : 0.92); ctx.fill(); }
       if (hot) { ctx.lineWidth = 1.5; ctx.strokeStyle = C.text; ctx.stroke(); }
       ctx.restore();
+      if (c.label) {
+        const right = Math.cos(c.ang) >= 0;
+        ctx.save();
+        ctx.translate(cx + Math.cos(c.ang) * this.labelR, cy + Math.sin(c.ang) * this.labelR);
+        ctx.rotate(right ? c.ang : c.ang + Math.PI);
+        ctx.textAlign = right ? "right" : "left"; ctx.textBaseline = "middle";
+        ctx.font = hot ? this.labelFont.replace(/^500/, "700") : this.labelFont;
+        ctx.globalAlpha = appear;
+        ctx.fillStyle = hot ? C.text : st === "running" ? C.run : st === "error" ? C.err : lit ? C.text : C.muted;
+        ctx.fillText(c.label, 0, 0.5);
+        ctx.restore();
+      }
       if (hot) for (const u of c.n.uses || []) {
         const sec = this.sectors.find((s) => s.s === u); if (!sec || sec === c.sec) continue;
         const tx = cx + Math.cos(sec.mid) * (R - 4), ty = cy + Math.sin(sec.mid) * (R - 4);
