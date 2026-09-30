@@ -79,6 +79,13 @@ function cssColors() {
   for (const s of SYSTEMS) c.sys[s] = g("--s-" + s);
   return c;
 }
+// Lesbare Schriftfarbe auf einer farbigen Fläche (dunkel auf hell, weiß auf dunkel).
+function inkOn(hex) {
+  const m = /^#([0-9a-f]{6})$/i.exec(hex); if (!m) return "#ffffff";
+  const n = parseInt(m[1], 16), lin = (v) => { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+  const L = 0.2126 * lin(n >> 16) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
+  return L > 0.3 ? "#0b1220" : "#ffffff";
+}
 function rgba(color, a) {
   const m = /^#([0-9a-f]{6})$/i.exec(color);
   if (!m) return color;
@@ -575,17 +582,21 @@ const TAU = Math.PI * 2;
 // Im Ring steht das System bereits am Sektor — System-Präfixe im Namen weglassen.
 // Kurzname für die Pills im Ring: ohne System-Präfix, Klammern und Füllwörter,
 // höchstens `max` Zeichen, an Wortgrenzen gekürzt.
-const FILLER = new Set(["und", "für", "der", "die", "das", "je", "von", "zu", "mit", "im", "in", "&", "–", "-", "→"]);
+const FILLER = new Set(["und", "für", "der", "die", "das", "je", "von", "zu", "mit", "im", "in", "&", "–", "-", "→", "workflow", "v2"]);
 function pillName(name, max) {
-  const words = ringName(name).replace(/^(KI-Agent|Dashboard API|Archiv)\s*[-–]?\s*/i, "").replace(/\([^)]*\)/g, "").split(/\s+/).filter((w) => w && !FILLER.has(w.toLowerCase()));
-  let out = "";
-  for (const w of words) {
-    const next = out ? `${out} ${w}` : w;
-    if (next.length > max) break;
-    out = next;
+  const words = ringName(name).replace(/^(KI-Agent|Dashboard API|Archiv)\s*[-–]?\s*/i, "").replace(/\([^)]*\)/g, "")
+    .split(/\s+/).filter((w) => w && !FILLER.has(w.toLowerCase()));
+  if (!words.length) return "";
+  const first = words[0];
+  // Ein prägnantes Wort genügt; ein zweites nur, wenn beide zusammen kurz bleiben.
+  if (first.length <= max + 3) {
+    const two = words[1] ? `${first} ${words[1]}` : first;
+    return two.length <= max && first.length < 7 ? two : first;
   }
-  if (!out) out = words[0] ? words[0].slice(0, max - 1) + "…" : "";
-  return out;
+  // Langes Kompositum: erster sinnvoller Teil vor dem Bindestrich
+  const parts = first.split("-");
+  if (parts.length > 1 && parts[0].length >= 4 && parts[0].length <= max + 3) return parts[0];
+  return first.slice(0, max) + "…";
 }
 const ringName = (n) => String(n).replace(/^(P8NEX|HubSpot|monday\.com|Stripe|SharePoint|Outlook|Microsoft 365|n8n)\s*[-–]\s*/i, "");
 const normA = (a) => ((a % TAU) + TAU) % TAU;
@@ -691,7 +702,7 @@ class Radial {
     this.labelFont = `600 ${fpx}px "Instrument Sans",system-ui,sans-serif`;
     this.innerR = this.hubR * (narrow || this.R < 200 ? 1.35 : 1.6);
     const maxW = this.labelR - this.innerR - 8 - this.pillPad * 2;
-    const maxChars = Math.max(6, Math.min(20, Math.floor(maxW / (fpx * 0.56))));
+    const maxChars = Math.max(6, Math.min(narrow ? 9 : 12, Math.floor(maxW / (fpx * 0.58))));
     const ctx = this.ctx; ctx.font = this.labelFont;
     for (const c of this.cells) {
       const spacing = ((c.sec.a1 - c.sec.a0) / c.sec.list.length) * this.labelR;
@@ -855,15 +866,15 @@ class Radial {
         // Kapsel: Statusfarbe als Tönung, kräftiger Rand bei Fehler/Lauf/Hover
         if (st === "running" || st === "error") { ctx.shadowColor = col; ctx.shadowBlur = st === "error" ? 8 + 4 * Math.sin(t * 4) : 12; }
         ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x0, -h / 2, w, h, h / 2) : ctx.rect(x0, -h / 2, w, h);
-        ctx.fillStyle = idle ? rgba(C["surface-3"] || C.surface, 0.9) : rgba(col, hot || lit ? 0.34 : st === "success" ? 0.16 : 0.24);
+        ctx.fillStyle = inactive ? rgba(C["surface-3"] || C.surface, 0.9) : rgba(col, st === "idle" ? 0.55 : hot || lit ? 1 : 0.9);
         ctx.fill(); ctx.shadowBlur = 0;
-        ctx.lineWidth = hot ? 1.6 : 1;
-        ctx.strokeStyle = hot ? C.text : inactive ? C.idle : rgba(col, st === "success" ? 0.45 : 0.8);
+        ctx.lineWidth = hot ? 1.8 : 1;
+        ctx.strokeStyle = hot ? C.text : inactive ? C.idle : rgba(col, 1);
         if (inactive) ctx.setLineDash([3, 3]);
         ctx.stroke(); ctx.setLineDash([]);
         ctx.textAlign = "center"; ctx.textBaseline = "middle";
         ctx.font = this.labelFont;
-        ctx.fillStyle = idle ? C.muted : C.text;
+        ctx.fillStyle = inactive ? C.muted : inkOn(col);
         ctx.fillText(c.label, x0 + w / 2, 0.5);
         ctx.restore();
       }
