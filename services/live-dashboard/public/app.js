@@ -79,13 +79,6 @@ function cssColors() {
   for (const s of SYSTEMS) c.sys[s] = g("--s-" + s);
   return c;
 }
-// Lesbare Schriftfarbe auf einer farbigen Fläche (dunkel auf hell, weiß auf dunkel).
-function inkOn(hex) {
-  const m = /^#([0-9a-f]{6})$/i.exec(hex); if (!m) return "#ffffff";
-  const n = parseInt(m[1], 16), lin = (v) => { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
-  const L = 0.2126 * lin(n >> 16) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
-  return L > 0.3 ? "#0b1220" : "#ffffff";
-}
 function rgba(color, a) {
   const m = /^#([0-9a-f]{6})$/i.exec(color);
   if (!m) return color;
@@ -358,7 +351,7 @@ function updateFeed(fresh) {
   const key = (r) => r.id + ":" + r.status;
   ul.innerHTML = rec.map((r) => {
     const isNew = seen && !fresh && !seen.has(key(r));
-    return `<li class="${isNew ? "new" : ""}" data-open="${esc(r.workflowId)}" tabindex="0" style="--tone:${tone(r.status)}">
+    return `<li class="${isNew ? "new" : ""}" data-open="${esc(r.workflowId)}" data-strike="${esc(r.workflowId)}" data-st="${r.status}" tabindex="0" style="--tone:${tone(r.status)}">
       <span class="feed-ic" title="${SLABEL[r.status] || r.status}">${IC[r.status] || IC.unknown}</span>
       <span class="feed-t"><b>${esc(shortName(r.name))}</b><small><i style="background:${sysVar(r.system)}"></i>${SYS_NAME[r.system] || r.system} · ${SLABEL[r.status] || r.status}</small></span>
       <span class="feed-r"><span data-rel="${esc(r.startedAt)}">${rel(r.startedAt)}</span><span class="num">${r.status === "running" ? "läuft …" : dur(r.durationMs)}</span></span></li>`;
@@ -545,6 +538,17 @@ function renderDrawer(focus = false) {
   if (focus || hadFocus) $("#dClose").focus();
 }
 
+// Hover/Fokus auf Live-Aktivität oder Meldung → Blitz auf den Workflow im Ring
+let lastStrike = null;
+const strikeFrom = (e) => {
+  const el = e.target.closest?.("[data-strike]"); if (!el || el === lastStrike) return;
+  lastStrike = el; setTimeout(() => { if (lastStrike === el) lastStrike = null; }, 900);
+  const st = el.dataset.st;
+  orbit?.strike(el.dataset.strike, { success: colors.ok, error: colors.err, running: colors.run, waiting: colors.warn }[st] || colors.accent);
+};
+document.addEventListener("mouseover", strikeFrom);
+document.addEventListener("focusin", strikeFrom);
+
 // ── Ereignis-Meldungen im Leitstand ───────────────────────────────────────────
 function pushEvent(n, kind) {
   const host = $("#events"); if (!host) return;
@@ -555,6 +559,7 @@ function pushEvent(n, kind) {
   el.innerHTML = `<span class="evt-ic">${IC[st]}</span><span class="evt-t"><b>${esc(shortName(n.name))}</b>
     <small>${kind === "start" ? "gestartet" : st === "error" ? "fehlgeschlagen" : "erfolgreich"}${kind !== "start" && rec?.durationMs != null ? ` in ${dur(rec.durationMs)}` : ""} · ${SYS_NAME[n.system]}</small></span>`;
   el.onclick = () => openDrawer(n.id);
+  el.dataset.strike = n.id; el.dataset.st = st;
   host.prepend(el);
   while (host.children.length > 3) host.lastChild.remove();
   setTimeout(() => { el.classList.add("out"); setTimeout(() => el.remove(), 450); }, 5200);
@@ -574,31 +579,12 @@ function hideTip() { $("#tip").hidden = true; }
 // n8n im Zentrum. Jedes System besitzt einen festen Sektor des Außenrings
 // (Breite ∝ Anzahl Workflows), die Workflows sitzen als radial ausgerichtete
 // Zellen darin (alphabetisch, Farbe = Status). Ein Radar-Sweep tastet den Ring
-// ab, laufende Workflows senden Lichtstrahlen zum Kern, Abschlüsse lösen einen
-// Puls zum Kern und eine Schockwelle aus. Workflow-Kanten laufen als Sehnen
+// ab, laufende Workflows senden Lichtstrahlen zum Kern, jede Live-Aktivität
+// schlägt als Blitz vom Kern in ihren Workflow ein, Abschlüsse lösen zusätzlich
+// eine Schockwelle aus. Workflow-Kanten laufen als Sehnen
 // durch das Innere.
 const SECTOR_ORDER = ["hubspot", "claude", "openai", "m365", "monday", "stripe", "extern", "n8n"];
 const TAU = Math.PI * 2;
-// Im Ring steht das System bereits am Sektor — System-Präfixe im Namen weglassen.
-// Kurzname für die Pills im Ring: ohne System-Präfix, Klammern und Füllwörter,
-// höchstens `max` Zeichen, an Wortgrenzen gekürzt.
-const FILLER = new Set(["und", "für", "der", "die", "das", "je", "von", "zu", "mit", "im", "in", "&", "–", "-", "→", "workflow", "v2"]);
-function pillName(name, max) {
-  const words = ringName(name).replace(/^(KI-Agent|Dashboard API|Archiv)\s*[-–]?\s*/i, "").replace(/\([^)]*\)/g, "")
-    .split(/\s+/).filter((w) => w && !FILLER.has(w.toLowerCase()));
-  if (!words.length) return "";
-  const first = words[0];
-  // Ein prägnantes Wort genügt; ein zweites nur, wenn beide zusammen kurz bleiben.
-  if (first.length <= max + 3) {
-    const two = words[1] ? `${first} ${words[1]}` : first;
-    return two.length <= max && first.length < 7 ? two : first;
-  }
-  // Langes Kompositum: erster sinnvoller Teil vor dem Bindestrich
-  const parts = first.split("-");
-  if (parts.length > 1 && parts[0].length >= 4 && parts[0].length <= max + 3) return parts[0];
-  return first.slice(0, max) + "…";
-}
-const ringName = (n) => String(n).replace(/^(P8NEX|HubSpot|monday\.com|Stripe|SharePoint|Outlook|Microsoft 365|n8n)\s*[-–]\s*/i, "");
 const normA = (a) => ((a % TAU) + TAU) % TAU;
 
 class Radial {
@@ -636,10 +622,10 @@ class Radial {
     if (this.prev.size) {
       for (const n of snap.nodes) {
         const p = this.prev.get(n.id); if (!p) continue;
-        if (n.status === "running" && p.status !== "running") { this.fx.push({ type: "ignite", id: n.id, t0: this.t }); pushEvent(n, "start"); }
+        if (n.status === "running" && p.status !== "running") { this.strike(n.id, colors.run); pushEvent(n, "start"); }
         else if ((p.status === "running" && n.status !== "running") || (n.lastRunAt !== p.lastRunAt && n.status !== "running")) {
           const color = n.status === "error" ? colors.err : colors.ok;
-          this.fx.push({ type: "pulse", id: n.id, t0: this.t, color });
+          this.strike(n.id, color);
           this.fx.push({ type: "wave", t0: this.t + 0.7, color });
           pushEvent(n, "done");
         }
@@ -694,24 +680,7 @@ class Radial {
         this.stars.push({ x, y, r: 0.4 + rnd() * 1.1, ph: rnd() * TAU, sp: 0.6 + rnd() * 1.6 });
       }
     }
-    // Zell-Pills: kurzer Name in einer statusfarbenen Kapsel, strahlenförmig nach innen.
-    this.labelR = this.R - 32;
-    this.pillH = narrow ? 14 : 19;
-    this.pillPad = narrow ? 5 : 8;
-    const fpx = narrow ? 8.5 : this.R < 200 ? 9.5 : 11;
-    this.labelFont = `600 ${fpx}px "Instrument Sans",system-ui,sans-serif`;
-    this.innerR = this.hubR * (narrow || this.R < 200 ? 1.35 : 1.6);
-    const maxW = this.labelR - this.innerR - 8 - this.pillPad * 2;
-    const maxChars = Math.max(6, Math.min(narrow ? 9 : 12, Math.floor(maxW / (fpx * 0.58))));
-    const ctx = this.ctx; ctx.font = this.labelFont;
-    for (const c of this.cells) {
-      const spacing = ((c.sec.a1 - c.sec.a0) / c.sec.list.length) * this.labelR;
-      c.label = null; c.labelW = 0;
-      if (spacing < this.pillH + 2 || maxW < 36) continue;
-      let txt = pillName(c.n.name, maxChars);
-      while (txt.length > 3 && ctx.measureText(txt).width > maxW) txt = txt.slice(0, -2) + "…";
-      c.label = txt; c.labelW = ctx.measureText(txt).width + this.pillPad * 2;
-    }
+    this.innerR = this.hubR * (narrow ? 1.4 : 1.6);
   }
   step(now) {
     const dt = Math.min(0.05, (now - this.last) / 1000); this.last = now;
@@ -806,7 +775,7 @@ class Radial {
 
     // Lichtstrahlen laufender Workflows (Zelle → Kern)
     for (const c of this.cells) if (c.n.status === "running") {
-      const rs = c.label ? this.labelR - c.labelW - 6 : this.R - 30;
+      const rs = this.R - 30;
       const sx = cx + Math.cos(c.ang) * rs, sy = cy + Math.sin(c.ang) * rs;
       const x0 = cx + Math.cos(c.ang) * this.hubR, y0 = cy + Math.sin(c.ang) * this.hubR;
       const g = ctx.createLinearGradient(sx, sy, x0, y0);
@@ -820,18 +789,7 @@ class Radial {
 
     // Abschluss-Pulse (Zelle → Kern) und Schockwellen vom Kern
     for (const f of this.fx) {
-      if (f.type === "pulse") {
-        const c = this.cellOf[f.id]; if (!c) continue;
-        const u = Math.min(1, (t - f.t0) / 0.7); if (u >= 1) continue;
-        const rs = c.label ? this.labelR - c.labelW - 6 : this.R - 30;
-        const sx = cx + Math.cos(c.ang) * rs, sy = cy + Math.sin(c.ang) * rs;
-        const x0 = cx + Math.cos(c.ang) * this.hubR, y0 = cy + Math.sin(c.ang) * this.hubR;
-        for (let k = 0; k < 8; k++) {
-          const uu = u - k * 0.03; if (uu < 0) break;
-          ctx.beginPath(); ctx.arc(sx + (x0 - sx) * uu, sy + (y0 - sy) * uu, 3.6 - k * 0.35, 0, TAU);
-          ctx.fillStyle = rgba(f.color, 1 - k / 8); ctx.fill();
-        }
-      } else if (f.type === "wave" && t >= f.t0) {
+      if (f.type === "wave" && t >= f.t0) {
         const u = (t - f.t0) / 1.4; if (u >= 1) continue;
         ctx.beginPath(); ctx.arc(cx, cy, this.hubR + u * (R - 20 - this.hubR), 0, TAU);
         ctx.strokeStyle = rgba(f.color, 0.55 * (1 - u)); ctx.lineWidth = 3 * (1 - u) + 0.5; ctx.stroke();
@@ -855,29 +813,6 @@ class Radial {
       else { ctx.fillStyle = lit && st !== "error" ? rgba(col, 1) : rgba(col, st === "idle" ? 0.6 : 0.92); ctx.fill(); }
       if (hot) { ctx.lineWidth = 1.5; ctx.strokeStyle = C.text; ctx.stroke(); }
       ctx.restore();
-      if (c.label) {
-        const right = Math.cos(c.ang) >= 0, w = c.labelW, h = this.pillH;
-        ctx.save();
-        ctx.translate(cx + Math.cos(c.ang) * this.labelR, cy + Math.sin(c.ang) * this.labelR);
-        ctx.rotate(right ? c.ang : c.ang + Math.PI);
-        ctx.globalAlpha = appear;
-        const x0 = right ? -w : 0;
-        const inactive = st === "inactive", idle = st === "idle" || inactive;
-        // Kapsel: Statusfarbe als Tönung, kräftiger Rand bei Fehler/Lauf/Hover
-        if (st === "running" || st === "error") { ctx.shadowColor = col; ctx.shadowBlur = st === "error" ? 8 + 4 * Math.sin(t * 4) : 12; }
-        ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x0, -h / 2, w, h, h / 2) : ctx.rect(x0, -h / 2, w, h);
-        ctx.fillStyle = inactive ? rgba(C["surface-3"] || C.surface, 0.9) : rgba(col, st === "idle" ? 0.55 : hot || lit ? 1 : 0.9);
-        ctx.fill(); ctx.shadowBlur = 0;
-        ctx.lineWidth = hot ? 1.8 : 1;
-        ctx.strokeStyle = hot ? C.text : inactive ? C.idle : rgba(col, 1);
-        if (inactive) ctx.setLineDash([3, 3]);
-        ctx.stroke(); ctx.setLineDash([]);
-        ctx.textAlign = "center"; ctx.textBaseline = "middle";
-        ctx.font = this.labelFont;
-        ctx.fillStyle = inactive ? C.muted : inkOn(col);
-        ctx.fillText(c.label, x0 + w / 2, 0.5);
-        ctx.restore();
-      }
       if (hot) for (const u of c.n.uses || []) {
         const sec = this.sectors.find((s) => s.s === u); if (!sec || sec === c.sec) continue;
         const tx = cx + Math.cos(sec.mid) * (R - 4), ty = cy + Math.sin(sec.mid) * (R - 4);
@@ -885,19 +820,56 @@ class Radial {
         ctx.strokeStyle = rgba(C.sys[u] || C.accent, 0.8); ctx.lineWidth = 1.5; ctx.setLineDash([3, 4]); ctx.stroke(); ctx.setLineDash([]);
       }
     });
-    // Zünd-Blitz beim Start eines Laufs
-    for (const f of this.fx) if (f.type === "ignite") {
-      const c = this.cellOf[f.id]; if (!c) continue;
-      const u = (t - f.t0) / 0.9; if (u >= 1) continue;
-      ctx.beginPath(); ctx.arc(c.x, c.y, 6 + u * 26, 0, TAU); ctx.strokeStyle = rgba(C.run, 0.8 * (1 - u)); ctx.lineWidth = 2; ctx.stroke();
-    }
+    // Blitze: vom n8n-Kern in den Workflow (jede Live-Aktivität, Hover im Feed)
+    for (const f of this.fx) if (f.type === "bolt") this.drawBolt(f, C);
 
     const running = this.snap.nodes.filter((n) => n.status === "running").length;
     this.drawHub(C, running, ease);
   }
+  // Blitz auslösen (öffentlich: auch vom Live-Feed per Hover)
+  strike(id, color) {
+    if (REDUCED || !this.cellOf?.[id]) return;
+    this.fx = this.fx.filter((f) => !(f.type === "bolt" && f.id === id));
+    this.fx.push({ type: "bolt", id, color: color || colors.accent, t0: this.t, seed: Math.floor(Math.random() * 1e6) });
+  }
+  drawBolt(f, C) {
+    const c = this.cellOf[f.id]; if (!c) return;
+    const u = (this.t - f.t0) / 0.75; if (u >= 1 || u < 0) return;
+    const ctx = this.ctx, cx = this.cx, cy = this.cy;
+    const x0 = cx + Math.cos(c.ang) * this.hubR, y0 = cy + Math.sin(c.ang) * this.hubR;
+    const dx = c.x - x0, dy = c.y - y0, len = Math.hypot(dx, dy), nx = -dy / len, ny = dx / len;
+    // Zackenpfad, flackert alle ~50 ms neu
+    let seed = f.seed + Math.floor(this.t * 20) * 7919;
+    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    const segs = Math.max(6, Math.round(len / 22)), amp = Math.min(16, len * 0.07);
+    const pts = [[x0, y0]];
+    for (let i = 1; i < segs; i++) {
+      const k = i / segs, off = (rnd() - 0.5) * 2 * amp * Math.sin(k * Math.PI);
+      pts.push([x0 + dx * k + nx * off, y0 + dy * k + ny * off]);
+    }
+    pts.push([c.x, c.y]);
+    const branch = [];
+    const bi = 2 + Math.floor(rnd() * (segs - 3)), [bx, by] = pts[bi];
+    for (let j = 1; j <= 3; j++) branch.push([bx + dx * 0.07 * j + nx * (rnd() - 0.2) * 14 * j, by + dy * 0.07 * j + ny * (rnd() - 0.2) * 14 * j]);
+    const flick = u < 0.12 ? 1 : (0.55 + 0.45 * rnd()) * (1 - u);
+    const path = (arr) => { ctx.beginPath(); ctx.moveTo(arr[0][0], arr[0][1]); for (const p of arr.slice(1)) ctx.lineTo(p[0], p[1]); };
+    ctx.save(); ctx.lineJoin = "round"; ctx.lineCap = "round";
+    ctx.shadowColor = f.color; ctx.shadowBlur = 30;
+    path(pts); ctx.strokeStyle = rgba(f.color, 0.4 * flick); ctx.lineWidth = 11; ctx.stroke();
+    path(pts); ctx.strokeStyle = rgba(f.color, 1 * flick); ctx.lineWidth = 3.4; ctx.stroke();
+    ctx.shadowBlur = 0;
+    path(pts); ctx.strokeStyle = `rgba(255,255,255,${0.9 * flick})`; ctx.lineWidth = 1.4; ctx.stroke();
+    path([[bx, by], ...branch]); ctx.strokeStyle = rgba(f.color, 0.7 * flick); ctx.lineWidth = 1.3; ctx.stroke();
+    // Einschlag: Lichtblitz + Ring an der Zelle
+    const g = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, 34);
+    g.addColorStop(0, rgba(f.color, 0.75 * flick)); g.addColorStop(1, rgba(f.color, 0));
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(c.x, c.y, 34, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(c.x, c.y, 6 + u * 24, 0, TAU); ctx.strokeStyle = rgba(f.color, 0.8 * (1 - u)); ctx.lineWidth = 2; ctx.stroke();
+    ctx.restore();
+  }
   drawHub(C, running, ease = 1) {
     const ctx = this.ctx, cx = this.cx, cy = this.cy, r = this.hubR * (0.6 + 0.4 * ease), t = this.t;
-    const flash = Math.max(0, ...this.fx.filter((f) => f.type === "wave" && t >= f.t0).map((f) => 1 - (t - f.t0) / 0.5));
+    const flash = Math.max(0, ...this.fx.filter((f) => (f.type === "wave" || f.type === "bolt") && t >= f.t0).map((f) => (f.type === "bolt" ? 0.6 : 1) * (1 - (t - f.t0) / 0.5)));
     const breath = (REDUCED ? 0.5 : Math.sin(t * 1.6) * 0.5 + 0.5) + flash * 1.2;
     const g = ctx.createRadialGradient(cx, cy, r * 0.3, cx, cy, r * (2.4 + flash));
     g.addColorStop(0, rgba(C.sys.n8n, 0.45 + 0.15 * breath)); g.addColorStop(1, rgba(C.sys.n8n, 0));
