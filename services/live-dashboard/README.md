@@ -20,9 +20,28 @@ Browser ──(HTTPS, Basic-Auth)──> Caddy ──> live-dashboard :8080
 live-dashboard ──(SSE /events)──> Browser   (Push bei jedem Poll)
 ```
 
+## Oberfläche: Prozess-Cockpit
+- **Cockpit**: Lagebild mit 24-h-Erfolgsquote und Status-Satz, Kennzahlen mit Sparklines,
+  **Radial-Leitstand** (n8n im Kern, jedes System ein fester Ringsektor, Workflows als
+  geordnete Zellen; Radar-Sweep, Lichtstrahlen laufender Prozesse, Puls und Schockwelle
+  bei Abschlüssen, Workflow-Kanten als Sehnen),
+  Live-Feed der letzten Ausführungen, 24-h-Zeitleiste, „Braucht Aufmerksamkeit" und „Aktivste Workflows".
+- **Leitstand-Layout**: Ab 1280×720 füllt das Cockpit genau einen Bildschirm (links Lage +
+  Kennzahlen, Mitte Radial-Leitstand, rechts Live-Aktivität, unten Zeitleiste + Aufmerksamkeit).
+  **TV-Modus** (`F` / Vollbild-Knopf) blendet Bedienelemente aus und zeigt eine große Uhr.
+  Ereignis-Meldungen unter dem Ring zeigen jeden Start und Abschluss.
+- **Workflows**: Suche, Filter nach System und Status, sortierbare Tabelle.
+- **Detail-Schublade** je Workflow mit Verbindungen, letzten Läufen und Link nach n8n.
+- **Drei Farbschemata**: Polarnacht (dunkel, kühl), Kupfer (dunkel, warm),
+  Porzellan (hell). Standard folgt dem System-Theme; die Wahl wird im Browser gespeichert.
+- **Tastatur**: `/` oder `Strg+K` Suche · `1`/`2` Ansicht · `T` Farbschema · `P` Pause · `F` TV-Modus · `Esc` schließen.
+- **Demo**: `/?demo` zeigt simulierte Daten (klar markiert) — zum Ausprobieren ohne n8n.
+- Schriften sind selbst gehostet (`public/fonts`, kein Google-Fonts-Abruf).
+
 ## Endpunkte
-- `GET /` – Archify-UI (Glassmorphism, dark), Pan/Zoom, Sortierung, Filter, Vollbild, einklappbar
-- `GET /events` – SSE-Stream (Snapshot bei Verbindung + bei jedem Poll)
+- `GET /` – Prozess-Cockpit (siehe oben); statische Dateien über eine feste Whitelist
+- `GET /events` – SSE-Stream (Snapshot bei Verbindung + bei jedem Poll; enthält
+  `nodes`, `edges`, `kpis`, `timeline` (24 Stunden-Buckets) und `recent` (letzte 30 Ausführungen))
 - `GET /healthz` – JSON `{ ok, lastOkAt, ageMs, error }`
 
 ## Konfiguration (`.env`)

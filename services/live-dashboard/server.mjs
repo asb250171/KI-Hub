@@ -69,12 +69,17 @@ async function poll() {
 }
 
 // ── Static + SSE Server ───────────────────────────────────────────────────────
-const MIME = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml" };
+const MIME = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".woff2": "font/woff2" };
+// Feste Whitelist statt Pfad-Durchreichung (kein Directory-Traversal möglich).
+const STATIC = { "/": "index.html", "/app.js": "app.js", "/app.css": "app.css", "/demo.js": "demo.js" };
+const FONT_RE = /^\/fonts\/([a-z0-9-]+\.woff2)$/;
 
 async function serveStatic(res, file) {
   try {
     const buf = await readFile(join(PUBLIC, file));
-    res.writeHead(200, { "content-type": MIME[extname(file)] || "application/octet-stream", "cache-control": "no-store" });
+    // Schriften sind selbst gehostet (DSGVO: kein Google-Fonts-Abruf) und ändern sich nie.
+    const cache = file.endsWith(".woff2") ? "public, max-age=31536000, immutable" : "no-store";
+    res.writeHead(200, { "content-type": MIME[extname(file)] || "application/octet-stream", "cache-control": cache });
     res.end(buf);
   } catch {
     res.writeHead(404); res.end("Not found");
@@ -107,8 +112,10 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  if (path === "/" || path === "") return serveStatic(res, "index.html");
-  if (path === "/app.js") return serveStatic(res, "app.js");
+  if (path === "") return serveStatic(res, "index.html");
+  if (STATIC[path]) return serveStatic(res, STATIC[path]);
+  const font = FONT_RE.exec(path);
+  if (font) return serveStatic(res, join("fonts", font[1]));
   res.writeHead(404); res.end("Not found");
 });
 

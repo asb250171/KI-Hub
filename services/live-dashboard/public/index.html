@@ -2,122 +2,15 @@
 <html lang="de">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Live-Prozesse · n8n</title>
-<style>
-  :root{
-    --bg:#050a1c;
-    --text:#F4F7FB;--dim:rgba(226,233,245,.66);--n8n:#00D9E8;
-    /* Glas-Tokens */
-    --glass:rgba(255,255,255,.07);
-    --glass-strong:rgba(255,255,255,.11);
-    --glass-hover:rgba(255,255,255,.15);
-    --glass-panel:rgba(14,22,44,.42);
-    --glass-border:rgba(255,255,255,.16);
-    --glass-highlight:rgba(255,255,255,.28);
-    --glass-shadow:0 8px 32px rgba(2,6,23,.45);
-    --blur:blur(18px) saturate(160%);
-    --blur-strong:blur(28px) saturate(180%);
-    /* Legacy-Aliase für Inline-Styles in app.js */
-    --surface:var(--glass-panel);--card:var(--glass);--border:var(--glass-border);
-  }
-  *{box-sizing:border-box}
-  html,body{margin:0;height:100%;color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
-  body{overflow:hidden}
-  /* Farbige, weichgezeichnete Hintergrund-Blobs — liefern die Tiefe hinter dem Glas */
-  body::before,body::after{content:"";position:fixed;z-index:-1;border-radius:50%;filter:blur(90px);opacity:.55;pointer-events:none}
-  body::before{width:60vmax;height:60vmax;left:-18vmax;top:-22vmax;background:radial-gradient(circle,#00D9E8 0%,#4C9AFF 45%,transparent 70%);animation:drift1 26s ease-in-out infinite alternate}
-  body::after{width:55vmax;height:55vmax;right:-16vmax;bottom:-20vmax;background:radial-gradient(circle,#B991F5 0%,#F178C6 45%,transparent 70%);animation:drift2 32s ease-in-out infinite alternate}
-  html{background:radial-gradient(ellipse at 70% 10%,rgba(86,221,176,.22),transparent 55%),radial-gradient(ellipse at 20% 90%,rgba(124,134,255,.25),transparent 55%),var(--bg)}
-  @keyframes drift1{to{transform:translate(12vmax,10vmax) scale(1.1)}}
-  @keyframes drift2{to{transform:translate(-10vmax,-12vmax) scale(1.15)}}
-
-  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,"Cascadia Mono",monospace}
-  #root{display:flex;flex-direction:column;gap:12px;height:100vh;height:100dvh;padding:16px}
-  #root:fullscreen{background:radial-gradient(ellipse at 15% 0%,rgba(0,217,232,.25),transparent 55%),radial-gradient(ellipse at 90% 100%,rgba(185,145,245,.28),transparent 55%),var(--bg)}
-
-  /* Basis-Glasfläche */
-  .glass,.topbar,.kpi,.notice,.legend,.canvas,.panel,.float,.zoom,.btn,select,.item{
-    background:var(--glass);
-    -webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);
-    border:1px solid var(--glass-border);
-    box-shadow:var(--glass-shadow),inset 0 1px 0 var(--glass-highlight);
-  }
-
-  .row{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
-  .topbar{padding:10px 14px;border-radius:18px}
-  .spacer{margin-left:auto}
-  h1{font-size:16px;font-weight:800;margin:0;letter-spacing:-.01em;background:linear-gradient(90deg,#fff,#bfefff);-webkit-background-clip:text;background-clip:text;color:transparent}
-  .pill{font-size:12px;font-weight:700;border-radius:999px;padding:4px 12px;border:1px solid currentColor;-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur)}
-  .btn{display:grid;place-items:center;height:34px;min-width:34px;padding:0 10px;border-radius:12px;color:var(--dim);cursor:pointer;font-size:12px;transition:background .2s,color .2s,border-color .2s,transform .15s}
-  .btn:hover{background:var(--glass-hover);color:var(--text);border-color:var(--glass-highlight)}
-  .btn:active{transform:scale(.96)}
-  .btn:focus-visible,select:focus-visible,.item:focus-visible,.zoom button:focus-visible{outline:2px solid var(--n8n);outline-offset:2px}
-  .btn.active{background:rgba(0,217,232,.2);color:var(--n8n);border-color:rgba(0,217,232,.55)}
-  select{color:var(--text);border-radius:12px;padding:7px 10px;font-size:12px;cursor:pointer;box-shadow:inset 0 1px 0 var(--glass-highlight)}
-  select:hover{background:var(--glass-hover)}
-  select option{background:#111a33;color:var(--text)}
-
-  .kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}
-  @media(max-width:900px){.kpis{grid-template-columns:repeat(3,1fr)}}
-  .kpi{position:relative;overflow:hidden;border-radius:16px;padding:10px 14px}
-  .kpi::before{content:"";position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,255,255,.14),transparent 45%);pointer-events:none}
-  .kpi b{font-size:20px;font-weight:700}.kpi span{display:block;margin-top:2px;font-size:10.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em}
-  .notice{border-radius:14px;padding:9px 14px;font-size:11.5px;color:#ffd0d0;background:rgba(241,109,109,.14);border-color:rgba(241,109,109,.4)}
-  .legend{display:flex;flex-wrap:wrap;gap:6px 16px;border-radius:14px;padding:9px 14px;font-size:10.5px;color:var(--dim)}
-  .chip{display:inline-flex;align-items:center;gap:6px}
-
-  .main{display:flex;gap:12px;flex:1;min-height:0}
-  .canvas{position:relative;flex:1;min-width:0;border-radius:22px;overflow:hidden;background-color:rgba(10,16,36,.28);
-    background-image:radial-gradient(rgba(255,255,255,.12) 1px,transparent 1.2px);background-size:22px 22px;cursor:grab}
-  .canvas.grabbing{cursor:grabbing}
-  .stage{position:absolute;transform-origin:0 0}
-  .panel{width:320px;flex:none;border-radius:22px;overflow:hidden;background:var(--glass-panel);-webkit-backdrop-filter:var(--blur-strong);backdrop-filter:var(--blur-strong);display:flex;flex-direction:column}
-  @media(max-width:1000px){.panel{display:none}}
-  .panel.hidden{display:none}
-  .panel h2,.float h2{margin:0;font-size:12px;font-weight:700;padding:14px 16px;border-bottom:1px solid var(--glass-border);letter-spacing:.02em}
-  .list{flex:1;overflow:auto;padding:10px}
-  .item{display:flex;gap:8px;align-items:center;width:100%;text-align:left;border-radius:12px;padding:9px 11px;margin-bottom:7px;cursor:pointer;color:var(--text);box-shadow:inset 0 1px 0 rgba(255,255,255,.14);transition:background .2s,border-color .2s,transform .15s}
-  .item:hover{background:var(--glass-hover);border-color:var(--glass-highlight);transform:translateX(2px)}
-  .item small{display:block;color:var(--dim);font-size:10px}
-  .badge{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font-size:10px;font-weight:600;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
-
-  /* Workflow-Karten im Canvas */
-  .card{background:var(--glass-strong)!important;-webkit-backdrop-filter:blur(12px) saturate(160%);backdrop-filter:blur(12px) saturate(160%);
-    box-shadow:0 6px 20px rgba(2,6,23,.35),inset 0 1px 0 var(--glass-highlight);transition:background .2s,transform .15s}
-  .card:hover{background:var(--glass-hover)!important;transform:translateY(-1px)}
-
-  .zoom{position:absolute;right:14px;bottom:14px;display:flex;flex-direction:column;border-radius:14px;overflow:hidden}
-  .zoom button{width:34px;height:34px;background:transparent;color:var(--dim);border:0;border-top:1px solid var(--glass-border);cursor:pointer;font-size:14px;transition:background .2s,color .2s}
-  .zoom button:hover{background:var(--glass-hover);color:var(--text)}
-  .zoom button:first-child{border-top:0}
-  .float{position:absolute;top:14px;right:14px;bottom:14px;width:320px;border-radius:20px;overflow:hidden;background:var(--glass-panel);-webkit-backdrop-filter:var(--blur-strong);backdrop-filter:var(--blur-strong);box-shadow:0 24px 64px rgba(0,0,0,.5),inset 0 1px 0 var(--glass-highlight);z-index:20}
-  .center{position:absolute;inset:0;display:grid;place-items:center;color:var(--dim);font-size:13px;text-align:center;padding:20px}
-
-  ::-webkit-scrollbar{width:8px;height:8px}
-  ::-webkit-scrollbar-thumb{background:rgba(255,255,255,.18);border-radius:999px}
-  ::-webkit-scrollbar-track{background:transparent}
-
-  .flow{stroke-dasharray:2 7;animation:dash 1.1s linear infinite}
-  @keyframes dash{to{stroke-dashoffset:-18}}
-  .pulse{animation:pulse 1.8s ease-in-out infinite}
-  @keyframes pulse{0%,100%{opacity:.5}50%{opacity:1}}
-  .dot{animation:mv 2.4s linear infinite}
-  @keyframes mv{to{offset-distance:100%}}
-
-  /* Fallback ohne backdrop-filter: deckendere Flächen für Lesbarkeit */
-  @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
-    :root{--glass:rgba(22,32,58,.92);--glass-strong:rgba(30,42,72,.95);--glass-panel:rgba(16,24,46,.95)}
-  }
-  @media (prefers-reduced-transparency: reduce){
-    :root{--glass:rgba(22,32,58,.94);--glass-strong:rgba(30,42,72,.96);--glass-panel:rgba(16,24,46,.96)}
-  }
-  @media (prefers-reduced-motion: reduce){
-    .flow{animation:none;stroke-dasharray:none}.dot{display:none}.pulse{animation:none;opacity:1}
-    body::before,body::after{animation:none}
-    .btn,.item,.card{transition:none}
-  }
-</style>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Prozess-Cockpit</title>
+<script>
+  // Farbschema vor dem ersten Paint setzen (kein Aufblitzen des falschen Themes).
+  (function(){ var t; try{ t=localStorage.getItem("cockpit-theme"); }catch(e){}
+    if(!t) t = matchMedia("(prefers-color-scheme: light)").matches ? "porzellan" : "polarnacht";
+    document.documentElement.dataset.scheme = t; })();
+</script>
+<link rel="stylesheet" href="/app.css" />
 </head>
 <body>
   <div id="root"></div>
