@@ -685,14 +685,20 @@ class Radial {
   step(now) {
     const dt = Math.min(0.05, (now - this.last) / 1000); this.last = now;
     if (!REDUCED && !state.paused) this.t += dt;
-    // Immer Blitze: reihum in die Workflows der letzten Live-Aktivitäten
-    if (!REDUCED && !state.paused && this.snap && this.t >= (this.nextAmbient ?? 1.8)) {
-      const rec = (this.snap.recent || []).filter((r) => this.cellOf?.[r.workflowId]).slice(0, 6);
-      if (rec.length) {
-        const r = rec[(this.ambientIdx = ((this.ambientIdx ?? -1) + 1) % rec.length)];
-        this.strike(r.workflowId, { success: colors.ok, error: colors.err, running: colors.run, waiting: colors.warn }[r.status] || colors.idle);
+    // Blitze auf alle aktiven Workflows: reihum im Uhrzeigersinn, Farbe = Status
+    if (!REDUCED && !state.paused && this.snap) {
+      const tone = (st) => ({ success: colors.ok, error: colors.err, running: colors.run, waiting: colors.warn }[st] || colors.idle);
+      const act = this.cells.filter((c) => c.n.active);
+      if (act.length && this.t >= (this.nextAmbient ?? 1.6)) {
+        const c = act[(this.ambientIdx = ((this.ambientIdx ?? -1) + 1) % act.length)];
+        this.strike(c.n.id, tone(c.n.status));
+        this.nextAmbient = this.t + Math.max(0.22, Math.min(1.2, 6 / act.length));
       }
-      this.nextAmbient = this.t + 2.2;
+      // Laufende Workflows zusätzlich etwa jede Sekunde
+      if (this.t >= (this.nextRunning ?? 1)) {
+        for (const c of this.cells) if (c.n.status === "running") this.strike(c.n.id, colors.run);
+        this.nextRunning = this.t + 1.05;
+      }
     }
     this.fx = this.fx.filter((f) => this.t - f.t0 < 2.2);
     this.draw();
