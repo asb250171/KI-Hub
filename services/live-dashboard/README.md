@@ -26,6 +26,10 @@ live-dashboard ──(SSE /events)──> Browser   (Push bei jedem Poll)
   geordnete Zellen; Radar-Sweep, Lichtstrahlen laufender Prozesse, Puls und Schockwelle
   bei Abschlüssen, Workflow-Kanten als Sehnen),
   Live-Feed der letzten Ausführungen, 24-h-Zeitleiste, „Braucht Aufmerksamkeit" und „Aktivste Workflows".
+- **Leitstand-Layout**: Ab 1280×720 füllt das Cockpit genau einen Bildschirm (links Lage +
+  Kennzahlen, Mitte Radial-Leitstand, rechts Live-Aktivität, unten Zeitleiste + Aufmerksamkeit).
+  **TV-Modus** (`F` / Vollbild-Knopf) blendet Bedienelemente aus und zeigt eine große Uhr.
+  Ereignis-Meldungen unter dem Ring zeigen jeden Start und Abschluss.
 - **Workflows**: Suche, Filter nach System und Status, sortierbare Tabelle.
 - **Detail-Schublade** je Workflow mit Verbindungen, letzten Läufen und Link nach n8n.
 - **Drei Farbschemata**: Polarnacht (dunkel, kühl), Kupfer (dunkel, warm),

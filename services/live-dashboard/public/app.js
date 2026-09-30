@@ -106,6 +106,7 @@ root.innerHTML = `
       <button class="tab" role="tab" data-view="workflows" id="tab-workflows">Workflows</button>
     </nav>
     <span class="spacer"></span>
+    <span class="clock num" id="clock" aria-hidden="true"></span>
     <span class="live" id="live" role="status" aria-live="polite"><span class="live-dot" id="liveDot"></span><span class="live-txt"><b id="liveLbl">Verbinde</b> <span id="liveAge"></span></span></span>
     <button class="search-btn" id="searchBtn" title="Workflow suchen (/)">${IC.search}<span>Workflow suchen</span><kbd>/</kbd></button>
     <button class="icon-btn" id="pauseBtn" aria-pressed="false" title="Live-Aktualisierung pausieren (P)">${IC.pause}</button>
@@ -135,6 +136,13 @@ function setScheme(id) {
   renderSchemes();
   orbit?.recolor();
 }
+document.addEventListener("fullscreenchange", () => {
+  const tv = !!document.fullscreenElement;
+  document.documentElement.classList.toggle("tv", tv);
+  if (tv && state.view !== "cockpit") setView("cockpit");
+  $("#fsBtn").setAttribute("aria-pressed", String(tv));
+  $("#fsBtn").title = tv ? "TV-Modus beenden (F)" : "TV-Modus / Vollbild (F)";
+});
 document.addEventListener("click", (e) => {
   const b = e.target.closest("[data-scheme]");
   if (b && b.closest("#schemes,#demoSeg")) { setScheme(b.dataset.scheme); return; }
@@ -200,48 +208,44 @@ function setView(v) {
 }
 
 function cockpitShell() {
-  return `<div class="view">
-    <div id="banner"></div>
-    <section class="hero">
-      <div class="card pulse-card enter" id="pulse">
-        <div class="ring" aria-hidden="true"><svg viewBox="0 0 120 120"><circle class="ring-track" cx="60" cy="60" r="52"/><circle class="ring-val" id="ringVal" cx="60" cy="60" r="52" stroke-dasharray="326.7" stroke-dashoffset="326.7"/></svg>
-          <div class="ring-c"><b id="ringNum">—</b><span>Erfolg · 24 h</span></div></div>
-        <div><div class="eyebrow">Lagebild</div><h1 class="headline" id="headline">Verbinde mit n8n …</h1>
-          <div class="subline" id="subline">Die Live-Daten erscheinen nach der ersten Abfrage.</div></div>
-      </div>
-      <div class="kpis">
-        ${kpiShell("k-active", "Aktive Workflows", "--accent")}
-        ${kpiShell("k-running", "Laufen gerade", "--run")}
-        ${kpiShell("k-runs", "Läufe · 24 h", "--accent")}
-        ${kpiShell("k-err", "Fehler · 24 h", "--err")}
-      </div>
-    </section>
-    <section class="stage">
-      <div class="card orbit-card enter">
-        <div class="card-h"><h2>Systemlandschaft</h2><span class="meta" id="orbitMeta">Live · Datenfluss nach n8n</span></div>
-        <div class="orbit-wrap" id="orbitWrap"></div>
-        <div class="orbit-sys" id="orbitSys"></div>
-        <div class="orbit-legend" id="orbitLegend">
-          <span><i style="background:var(--ok)"></i>Erfolgreich</span><span><i style="background:var(--err)"></i>Fehler</span>
-          <span><i style="background:var(--run)"></i>Läuft</span><span><i style="background:var(--warn)"></i>Wartet</span>
-          <span><i style="background:var(--idle)"></i>Bereit</span><span><i class="ring-i"></i>Inaktiv</span></div>
-      </div>
-      <div class="card feed-card enter">
-        <div class="card-h"><h2>Live-Aktivität</h2><span class="meta">letzte Ausführungen</span></div>
-        <ul class="feed" id="feed" aria-live="polite"></ul>
-      </div>
-    </section>
-    <section class="lower">
-      <div class="card enter">
-        <div class="card-h"><h2>Läufe der letzten 24 Stunden</h2><span class="meta" id="tlMeta"></span></div>
-        <div class="legend" id="tlLegend"></div>
-        <div class="chart" id="timeline"></div>
-      </div>
-      <div class="card enter">
-        <div class="card-h"><h2>Braucht Aufmerksamkeit</h2><span class="meta" id="attnMeta"></span></div>
-        <div id="attn"></div>
-      </div>
-    </section>
+  return `<div class="view cockpit" id="cockpitView">
+    <div id="banner" class="c-banner"></div>
+    <div class="card pulse-card c-lage enter" id="pulse">
+      <div class="ring" aria-hidden="true"><svg viewBox="0 0 120 120"><defs><linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color:var(--tone,var(--accent))"/><stop offset="1" style="stop-color:var(--tone,var(--accent));stop-opacity:.55"/></linearGradient></defs>
+        <circle class="ring-track" cx="60" cy="60" r="52"/><circle class="ring-val" id="ringVal" cx="60" cy="60" r="52" stroke-dasharray="326.7" stroke-dashoffset="326.7"/></svg>
+        <div class="ring-c"><b id="ringNum">—</b><span>Erfolg · 24 h</span></div></div>
+      <div class="lage-t"><div class="eyebrow">Lagebild</div><h1 class="headline" id="headline">Verbinde mit n8n …</h1>
+        <div class="subline" id="subline">Die Live-Daten erscheinen nach der ersten Abfrage.</div></div>
+    </div>
+    <div class="kpis c-kpis">
+      ${kpiShell("k-active", "Aktive Workflows", "--accent")}
+      ${kpiShell("k-running", "Laufen gerade", "--run")}
+      ${kpiShell("k-runs", "Läufe · 24 h", "--accent")}
+      ${kpiShell("k-err", "Fehler · 24 h", "--err")}
+    </div>
+    <div class="card orbit-card c-radial enter">
+      <div class="card-h"><h2>Systemlandschaft</h2><span class="meta" id="orbitMeta">Live · Datenfluss nach n8n</span></div>
+      <div class="orbit-wrap" id="orbitWrap"></div>
+      <div class="events" id="events" aria-live="polite"></div>
+      <div class="orbit-sys" id="orbitSys"></div>
+      <div class="orbit-legend" id="orbitLegend">
+        <span><i style="background:var(--ok)"></i>Erfolgreich</span><span><i style="background:var(--err)"></i>Fehler</span>
+        <span><i style="background:var(--run)"></i>Läuft</span><span><i style="background:var(--warn)"></i>Wartet</span>
+        <span><i style="background:var(--idle)"></i>Bereit</span><span><i class="ring-i"></i>Inaktiv</span></div>
+    </div>
+    <div class="card feed-card c-feed enter">
+      <div class="card-h"><h2>Live-Aktivität</h2><span class="meta">letzte Ausführungen</span></div>
+      <ul class="feed" id="feed" aria-live="polite"></ul>
+    </div>
+    <div class="card c-time enter">
+      <div class="card-h"><h2>Läufe der letzten 24 Stunden</h2><span class="meta" id="tlMeta"></span></div>
+      <div class="legend" id="tlLegend"></div>
+      <div class="chart" id="timeline"></div>
+    </div>
+    <div class="card c-attn enter">
+      <div class="card-h"><h2>Braucht Aufmerksamkeit</h2><span class="meta" id="attnMeta"></span></div>
+      <div id="attn" class="attn-body"></div>
+    </div>
   </div>`;
 }
 const kpiShell = (id, label, tok) => `<div class="card kpi enter" id="${id}" style="--tone:var(${tok})">
@@ -359,12 +363,13 @@ function updateTimeline() {
   const host = $("#timeline"); if (!host || !state.snap) return;
   const tl = state.snap.timeline || [];
   if (!tl.length) { host.innerHTML = `<div class="empty">Keine Zeitleiste verfügbar.</div>`; return; }
+  const grow = !host.dataset.grown && !REDUCED; host.dataset.grown = "1";
   const hasOther = tl.some((b) => b.other);
   $("#tlLegend").innerHTML = `<span><i style="background:var(--ok)"></i>Erfolgreich</span><span><i style="background:var(--err)"></i>Fehler</span>${hasOther ? `<span><i style="background:var(--idle)"></i>Laufend / wartend</span>` : ""}`;
   const tot = tl.reduce((a, b) => a + b.success + b.error + b.other, 0);
   const peak = tl.reduce((m, b, i) => (b.success + b.error + b.other > m.v ? { v: b.success + b.error + b.other, i } : m), { v: 0, i: 0 });
   $("#tlMeta").textContent = `${nf.format(tot)} Läufe · Spitze ${new Date(tl[peak.i].t).getHours()}:00 Uhr`;
-  const W = host.clientWidth - 36 || 600, H = Math.max(200, host.clientHeight - 24 || 210), ml = 30, mr = 4, mt = 8, mb = 24;
+  const W = host.clientWidth - 36 || 600, H = Math.max(90, host.clientHeight - 24 || 210), ml = 30, mr = 4, mt = 8, mb = 24;
   const pw = W - ml - mr, ph = H - mt - mb;
   const rawMax = Math.max(1, ...tl.map((b) => b.success + b.error + b.other));
   const stepN = rawMax <= 4 ? 1 : rawMax <= 10 ? 2 : rawMax <= 25 ? 5 : rawMax <= 50 ? 10 : Math.ceil(rawMax / 50) * 10;
@@ -389,7 +394,7 @@ function updateTimeline() {
     });
     const hr = new Date(b.t).getHours();
     const last = i === tl.length - 1;
-    svg += `<g class="col" data-i="${i}"><rect class="bar-hit" x="${ml + i * cw}" y="${mt}" width="${cw}" height="${ph}" rx="6"/>${g}
+    svg += `<g class="col${grow ? " grow" : ""}${last ? " now" : ""}" data-i="${i}" style="--d:${i * 28}ms"><rect class="bar-hit" x="${ml + i * cw}" y="${mt}" width="${cw}" height="${ph}" rx="6"/>${g}
       ${i % 6 === 0 || last ? `<text x="${x + bw / 2}" y="${H - 6}" text-anchor="middle" ${last ? 'style="fill:var(--text)"' : ""}>${last ? "jetzt" : String(hr).padStart(2, "0") + ":00"}</text>` : ""}</g>`;
   });
   host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" style="height:${H}px" role="img" aria-label="Ausführungen pro Stunde in den letzten 24 Stunden">${svg}</svg>`;
@@ -533,6 +538,21 @@ function renderDrawer(focus = false) {
   if (focus || hadFocus) $("#dClose").focus();
 }
 
+// ── Ereignis-Meldungen im Leitstand ───────────────────────────────────────────
+function pushEvent(n, kind) {
+  const host = $("#events"); if (!host) return;
+  const rec = (state.snap?.recent || []).find((r) => r.workflowId === n.id);
+  const st = kind === "start" ? "running" : n.status === "error" ? "error" : "success";
+  const el = document.createElement("div");
+  el.className = "evt"; el.style.setProperty("--tone", tone(st));
+  el.innerHTML = `<span class="evt-ic">${IC[st]}</span><span class="evt-t"><b>${esc(shortName(n.name))}</b>
+    <small>${kind === "start" ? "gestartet" : st === "error" ? "fehlgeschlagen" : "erfolgreich"}${kind !== "start" && rec?.durationMs != null ? ` in ${dur(rec.durationMs)}` : ""} · ${SYS_NAME[n.system]}</small></span>`;
+  el.onclick = () => openDrawer(n.id);
+  host.prepend(el);
+  while (host.children.length > 3) host.lastChild.remove();
+  setTimeout(() => { el.classList.add("out"); setTimeout(() => el.remove(), 450); }, 5200);
+}
+
 // ── Tooltip ───────────────────────────────────────────────────────────────────
 function showTip(e, html) {
   const t = $("#tip"); t.innerHTML = html; t.hidden = false;
@@ -588,14 +608,15 @@ class Radial {
     const bySys = {}; snap.nodes.forEach((n) => (bySys[n.system] = bySys[n.system] || []).push(n));
     Object.values(bySys).forEach((l) => l.sort((a, b) => shortName(a.name).localeCompare(shortName(b.name), "de")));
     this.bySys = bySys;
-    if (this.prev.size && !REDUCED) {
+    if (this.prev.size) {
       for (const n of snap.nodes) {
         const p = this.prev.get(n.id); if (!p) continue;
-        if (n.status === "running" && p.status !== "running") this.fx.push({ type: "ignite", id: n.id, t0: this.t });
+        if (n.status === "running" && p.status !== "running") { this.fx.push({ type: "ignite", id: n.id, t0: this.t }); pushEvent(n, "start"); }
         else if ((p.status === "running" && n.status !== "running") || (n.lastRunAt !== p.lastRunAt && n.status !== "running")) {
           const color = n.status === "error" ? colors.err : colors.ok;
           this.fx.push({ type: "pulse", id: n.id, t0: this.t, color });
           this.fx.push({ type: "wave", t0: this.t + 0.7, color });
+          pushEvent(n, "done");
         }
       }
     }
@@ -615,7 +636,7 @@ class Radial {
     const narrow = W < 560;
     this.narrow = narrow;
     this.cx = W / 2; this.cy = H / 2;
-    this.R = Math.max(70, Math.min(H / 2 - (narrow ? 30 : 48), W / 2 - (narrow ? 34 : 150)));
+    this.R = Math.max(70, Math.min(H / 2 - (narrow ? 30 : 48), W / 2 - (narrow ? 34 : 172)));
     this.hubR = this.R * 0.17;
     const used = new Set((this.snap?.nodes || []).flatMap((n) => n.uses || []));
     const sys = SECTOR_ORDER.filter((s) => this.bySys?.[s]?.length || used.has(s));
@@ -638,6 +659,16 @@ class Radial {
       });
     }
     this.cellOf = Object.fromEntries(this.cells.map((c) => [c.n.id, c]));
+    // Sternenfeld außerhalb des Rings (feste Positionen je Größe)
+    if (!this.stars || this.starsFor !== `${W}x${H}`) {
+      this.starsFor = `${W}x${H}`; this.stars = [];
+      let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+      for (let i = 0; i < Math.round((W * H) / 2600); i++) {
+        const x = rnd() * W, y = rnd() * H;
+        if (Math.hypot(x - this.cx, y - this.cy) < this.R + 18) continue;
+        this.stars.push({ x, y, r: 0.4 + rnd() * 1.1, ph: rnd() * TAU, sp: 0.6 + rnd() * 1.6 });
+      }
+    }
     // Zellbeschriftungen: strahlenförmig vom Zellring nach innen, gekürzt auf den verfügbaren Platz.
     this.labelR = this.R - 33;
     this.labelFont = `500 ${narrow ? 9 : 11}px "Instrument Sans",system-ui,sans-serif`;
@@ -668,6 +699,20 @@ class Radial {
     const intro = REDUCED ? 1 : Math.min(1, (performance.now() - this.born) / 1600), ease = 1 - Math.pow(1 - intro, 3);
     ctx.clearRect(0, 0, W, H);
 
+    // Sternenfeld
+    for (const st of this.stars || []) {
+      const a = REDUCED ? 0.4 : 0.15 + 0.45 * (0.5 + 0.5 * Math.sin(t * st.sp + st.ph));
+      ctx.beginPath(); ctx.arc(st.x, st.y, st.r, 0, TAU); ctx.fillStyle = rgba(C.muted, a * ease); ctx.fill();
+    }
+    // HUD: gegenläufig rotierende Bogensegmente um die Skala
+    ctx.save(); ctx.lineCap = "round";
+    for (let i = 0; i < 3; i++) {
+      const a0 = (REDUCED ? 0 : t * 0.22) + (i * TAU) / 3;
+      ctx.beginPath(); ctx.arc(cx, cy, R + 21, a0, a0 + 0.55 * ease); ctx.strokeStyle = rgba(C.accent, 0.55); ctx.lineWidth = 1.6; ctx.stroke();
+      const b0 = (REDUCED ? 0 : -t * 0.14) + (i * TAU) / 3 + 0.9;
+      ctx.beginPath(); ctx.arc(cx, cy, this.hubR * 1.25, b0, b0 + 1.1 * ease); ctx.strokeStyle = rgba(C.sys.n8n, 0.5); ctx.lineWidth = 1.2; ctx.stroke();
+    }
+    ctx.restore();
     // Instrumenten-Grund: Kernglühen, konzentrische Ringe, Skala
     const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 1.15);
     glow.addColorStop(0, rgba(C.sys.n8n, 0.16)); glow.addColorStop(0.55, rgba(C.accent, 0.05)); glow.addColorStop(1, rgba(C.accent, 0));
@@ -815,10 +860,11 @@ class Radial {
   }
   drawHub(C, running, ease = 1) {
     const ctx = this.ctx, cx = this.cx, cy = this.cy, r = this.hubR * (0.6 + 0.4 * ease), t = this.t;
-    const breath = REDUCED ? 0.5 : Math.sin(t * 1.6) * 0.5 + 0.5;
-    const g = ctx.createRadialGradient(cx, cy, r * 0.3, cx, cy, r * 2.4);
+    const flash = Math.max(0, ...this.fx.filter((f) => f.type === "wave" && t >= f.t0).map((f) => 1 - (t - f.t0) / 0.5));
+    const breath = (REDUCED ? 0.5 : Math.sin(t * 1.6) * 0.5 + 0.5) + flash * 1.2;
+    const g = ctx.createRadialGradient(cx, cy, r * 0.3, cx, cy, r * (2.4 + flash));
     g.addColorStop(0, rgba(C.sys.n8n, 0.45 + 0.15 * breath)); g.addColorStop(1, rgba(C.sys.n8n, 0));
-    ctx.beginPath(); ctx.arc(cx, cy, r * 2.4, 0, TAU); ctx.fillStyle = g; ctx.fill();
+    ctx.beginPath(); ctx.arc(cx, cy, r * (2.4 + flash), 0, TAU); ctx.fillStyle = g; ctx.fill();
     // rotierender Energiering
     if (ctx.createConicGradient) {
       const cg = ctx.createConicGradient(REDUCED ? 0 : t * 1.4, cx, cy);
@@ -859,11 +905,18 @@ class Radial {
 }
 
 // ── Relative Zeiten sekündlich aktualisieren ──────────────────────────────────
+function tickClock() {
+  const c = $("#clock"); if (!c) return;
+  const d = new Date();
+  c.innerHTML = `${d.toLocaleTimeString("de-DE")}<small>${d.toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "short" })}</small>`;
+}
 setInterval(() => {
+  tickClock();
   updateLive();
   document.querySelectorAll("[data-rel]").forEach((el) => { const v = el.dataset.rel; if (v) el.textContent = rel(v); });
 }, 1000);
 let rz; addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => { if (state.view === "cockpit") { updateTimeline(); updateKpis(); } }, 150); });
+new ResizeObserver(() => { clearTimeout(rz); rz = setTimeout(() => { if (state.view === "cockpit") { updateTimeline(); updateKpis(); } }, 150); }).observe(document.getElementById("main"));
 
 // ── Daten ─────────────────────────────────────────────────────────────────────
 function onData(d) {
@@ -883,5 +936,6 @@ function startDemo() {
 }
 
 renderSchemes();
+tickClock();
 setView("cockpit");
 if (DEMO) startDemo(); else connect();
