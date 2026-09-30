@@ -20,9 +20,23 @@ Browser ──(HTTPS, Basic-Auth)──> Caddy ──> live-dashboard :8080
 live-dashboard ──(SSE /events)──> Browser   (Push bei jedem Poll)
 ```
 
+## Oberfläche: Prozess-Cockpit
+- **Cockpit**: Lagebild mit 24-h-Erfolgsquote und Status-Satz, Kennzahlen mit Sparklines,
+  **Orbit-Systemkarte** (n8n im Zentrum, Workflows kreisen um ihr System, Partikel
+  zeigen den Datenfluss, neue Läufe starten als Komet, Abschlüsse lösen eine Welle aus),
+  Live-Feed der letzten Ausführungen, 24-h-Zeitleiste, „Braucht Aufmerksamkeit" und „Aktivste Workflows".
+- **Workflows**: Suche, Filter nach System und Status, sortierbare Tabelle.
+- **Detail-Schublade** je Workflow mit Verbindungen, letzten Läufen und Link nach n8n.
+- **Drei Farbschemata**: Polarnacht (dunkel, kühl), Kupfer (dunkel, warm),
+  Porzellan (hell). Standard folgt dem System-Theme; die Wahl wird im Browser gespeichert.
+- **Tastatur**: `/` oder `Strg+K` Suche · `1`/`2` Ansicht · `T` Farbschema · `P` Pause · `F` TV-Modus · `Esc` schließen.
+- **Demo**: `/?demo` zeigt simulierte Daten (klar markiert) — zum Ausprobieren ohne n8n.
+- Schriften sind selbst gehostet (`public/fonts`, kein Google-Fonts-Abruf).
+
 ## Endpunkte
-- `GET /` – Archify-UI (Glassmorphism, dark), Pan/Zoom, Sortierung, Filter, Vollbild, einklappbar
-- `GET /events` – SSE-Stream (Snapshot bei Verbindung + bei jedem Poll)
+- `GET /` – Prozess-Cockpit (siehe oben); statische Dateien über eine feste Whitelist
+- `GET /events` – SSE-Stream (Snapshot bei Verbindung + bei jedem Poll; enthält
+  `nodes`, `edges`, `kpis`, `timeline` (24 Stunden-Buckets) und `recent` (letzte 30 Ausführungen))
 - `GET /healthz` – JSON `{ ok, lastOkAt, ageMs, error }`
 
 ## Konfiguration (`.env`)

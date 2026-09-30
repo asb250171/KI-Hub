@@ -102,6 +102,49 @@ export function buildSnapshot(workflows, executions) {
   const present = new Set(nodes.map((n) => n.id));
   const edges = REAL_EDGES.filter((e) => present.has(e.from) && present.has(e.to));
 
+  // Zeitleiste: Läufe der letzten 24 Stunden in Stunden-Buckets.
+  const HOUR = 3600e3;
+  const now = Date.now();
+  const start0 = Math.floor(now / HOUR) * HOUR - 23 * HOUR;
+  const timeline = Array.from({ length: 24 }, (_, i) => ({
+    t: new Date(start0 + i * HOUR).toISOString(), success: 0, error: 0, other: 0,
+  }));
+  const byNode = new Map(nodes.map((n) => [n.id, n]));
+  const recentAll = [];
+  for (const ex of executions || []) {
+    if (!byNode.has(ex.workflowId)) continue;
+    const t = new Date(ex.startedAt || ex.stoppedAt || 0).getTime();
+    const st = mapStatus(ex.status || (ex.finished ? "success" : "running"));
+    if (t >= start0 && t <= now + HOUR) {
+      const b = timeline[Math.min(23, Math.floor((t - start0) / HOUR))];
+      if (st === "success") b.success++; else if (st === "error") b.error++; else b.other++;
+    }
+    recentAll.push({ ex, t, st });
+  }
+  // Letzte Ausführungen für den Aktivitäts-Feed.
+  const recent = recentAll
+    .sort((a, b) => b.t - a.t)
+    .slice(0, 30)
+    .map(({ ex, st }) => {
+      const n = byNode.get(ex.workflowId);
+      const s = ex.startedAt ? new Date(ex.startedAt).getTime() : null;
+      const e = ex.stoppedAt ? new Date(ex.stoppedAt).getTime() : null;
+      return {
+        id: String(ex.id ?? `${ex.workflowId}-${ex.startedAt}`),
+        workflowId: ex.workflowId,
+        name: n.name,
+        system: n.system,
+        status: st,
+        startedAt: ex.startedAt || null,
+        stoppedAt: ex.stoppedAt || null,
+        durationMs: s && e && e >= s ? e - s : null,
+      };
+    });
+
+  const runs24h = timeline.reduce((a, b) => a + b.success + b.error + b.other, 0);
+  const errors24h = timeline.reduce((a, b) => a + b.error, 0);
+  const ok24h = timeline.reduce((a, b) => a + b.success, 0);
+
   const kpis = {
     workflowsTotal: nodes.length,
     workflowsActive: nodes.filter((n) => n.active).length,
@@ -109,7 +152,10 @@ export function buildSnapshot(workflows, executions) {
     success: nodes.filter((n) => n.status === "success").length,
     failed: nodes.filter((n) => n.status === "error").length,
     waiting: nodes.filter((n) => n.status === "waiting").length,
+    runs24h,
+    errors24h,
+    successRate24h: ok24h + errors24h > 0 ? ok24h / (ok24h + errors24h) : null,
   };
 
-  return { generatedAt: new Date().toISOString(), nodes, edges, kpis };
+  return { generatedAt: new Date().toISOString(), nodes, edges, kpis, timeline, recent };
 }
