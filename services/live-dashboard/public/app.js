@@ -11,6 +11,7 @@ const SLABEL = { success: "Erfolgreich", error: "Fehlgeschlagen", running: "Läu
 const SORDER = { error: 0, running: 1, waiting: 2, success: 3, idle: 4, inactive: 5, unknown: 6 };
 const TONE = { success: "--ok", error: "--err", running: "--run", waiting: "--warn", idle: "--idle", inactive: "--idle", unknown: "--idle" };
 const SCHEMES = [
+  { id: "studio", name: "Studio", desc: "Tiefschwarz mit leuchtendem Cyan. Der filmische Leitstand-Look.", sw: ["#060608", "#38bdf8", "#ff4d7a", "#a78bfa"] },
   { id: "polarnacht", name: "Polarnacht", desc: "Dunkel und kühl. Für den Leitstand und die TV-Wand.", sw: ["#0a1222", "#8aa6ff", "#35c77b", "#00a7ba"] },
   { id: "kupfer", name: "Kupfer", desc: "Warmes Dunkel mit Kupfer-Akzent. Ruhig bei langen Sitzungen.", sw: ["#140f0c", "#f2a65e", "#5cc98a", "#d3721e"] },
   { id: "porzellan", name: "Porzellan", desc: "Hell und klar. Für Büro, Beamer und Präsentationen.", sw: ["#eef1f6", "#3355e0", "#1a9455", "#0089a4"] },
@@ -37,7 +38,16 @@ const IC = {
   unknown: I('<circle cx="12" cy="12" r="2"/>'),
   shield: I('<path d="M12 3 5 6v6c0 4.2 3 7.6 7 9 4-1.4 7-4.8 7-9V6z"/><path d="m9 12 2 2 4-4"/>'),
   chev: I('<path d="m9 6 6 6-6 6"/>'),
+  home: I('<path d="M4 10.5 12 4l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5.5h-5V20H5a1 1 0 0 1-1-1z"/>'),
+  grid: I('<rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/>'),
+  list: I('<path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r=".6"/><circle cx="4.5" cy="12" r=".6"/><circle cx="4.5" cy="18" r=".6"/>'),
+  bell: I('<path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/>'),
+  plus: I('<path d="M12 5v14M5 12h14"/>'),
+  side: I('<rect x="3.5" y="4.5" width="17" height="15" rx="3"/><path d="M9.5 4.5v15"/><path d="m15.5 10-2 2 2 2"/>'),
+  up: I('<path d="M12 19V5M6 11l6-6 6 6"/>'),
+  down: I('<path d="M12 5v14M6 13l6 6 6-6"/>'),
 };
+const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 
 // ── Helfer ────────────────────────────────────────────────────────────────────
 const $ = (s, el = document) => el.querySelector(s);
@@ -91,16 +101,33 @@ const state = {
   selected: null, q: "", sys: "all", status: "all", sort: { key: "status", dir: 1 },
   schemesOpen: false, seenExec: null, lastBeat: 0,
 };
-let scheme = document.documentElement.dataset.scheme || "polarnacht";
+let scheme = document.documentElement.dataset.scheme || "studio";
+let sideCollapsed = false; try { sideCollapsed = localStorage.getItem("cockpit-side") === "1"; } catch { /* privat/gesperrt */ }
 let colors = cssColors();
 let orbit = null;
 
 // ── Shell ─────────────────────────────────────────────────────────────────────
 const root = document.getElementById("root");
+const VIEW_NAME = { cockpit: "Cockpit", workflows: "Workflows" };
 root.innerHTML = `
+  <aside class="side" id="side" aria-label="Navigation">
+    <div class="side-h"><span class="logo" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M22.5 11.2A8.4 8.4 0 1 0 24.4 16v8.2" fill="none" stroke="currentColor" stroke-width="4.2" stroke-linecap="round"/></svg><i></i></span>
+      <span class="side-name"><b>Prozess-Cockpit</b><small>n8n · Compliance Manufaktur</small></span></div>
+    <div class="side-sec">Übersicht</div>
+    <nav class="side-nav" role="tablist" aria-label="Ansicht">
+      <button class="side-item" role="tab" data-view="cockpit" title="Cockpit (1)">${IC.grid}<span>Cockpit</span></button>
+      <button class="side-item" role="tab" data-view="workflows" title="Workflows (2)">${IC.list}<span>Workflows</span><em class="num" id="sideWf"></em></button>
+    </nav>
+    <div class="side-sec">Systeme</div>
+    <div class="side-sys" id="sideSys"></div>
+    <span class="spacer"></span>
+    <button class="side-item side-collapse" id="sideBtn" aria-pressed="false" title="Seitenleiste einklappen">${IC.side}<span>Einklappen</span></button>
+  </aside>
+  <div class="app">
   <header class="bar">
-    <div class="brand"><span class="brand-mark">${IC.pulse}</span>
+    <div class="brand"><span class="logo" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M22.5 11.2A8.4 8.4 0 1 0 24.4 16v8.2" fill="none" stroke="currentColor" stroke-width="4.2" stroke-linecap="round"/></svg><i></i></span>
       <span><div class="brand-name">Prozess-Cockpit</div><div class="brand-sub">n8n · Compliance Manufaktur</div></span></div>
+    <nav class="crumbs" aria-label="Pfad"><button data-view="cockpit" class="crumb">${IC.home}<span>Home</span></button><span class="crumb-sep">/</span><span class="crumb cur" id="crumbCur">${IC.grid}<span>Cockpit</span></span></nav>
     <nav class="tabs" role="tablist" aria-label="Ansicht">
       <button class="tab" role="tab" data-view="cockpit" id="tab-cockpit">Cockpit</button>
       <button class="tab" role="tab" data-view="workflows" id="tab-workflows">Workflows</button>
@@ -108,17 +135,37 @@ root.innerHTML = `
     <span class="spacer"></span>
     <span class="clock num" id="clock" aria-hidden="true"></span>
     <span class="live" id="live" role="status" aria-live="polite"><span class="live-dot" id="liveDot"></span><span class="live-txt"><b id="liveLbl">Verbinde</b> <span id="liveAge"></span></span></span>
-    <button class="search-btn" id="searchBtn" title="Workflow suchen (/)">${IC.search}<span>Workflow suchen</span><kbd>/</kbd></button>
+    <button class="search-btn" id="searchBtn" title="Workflow suchen (/ oder ${MAC ? "⌘K" : "Strg+K"})">${IC.search}<span>Workflow suchen …</span><kbd>${MAC ? "⌘K" : "Strg K"}</kbd></button>
+    <button class="icon-btn bell" id="bellBtn" title="Braucht Aufmerksamkeit">${IC.bell}<i class="bell-dot" id="bellDot" hidden></i></button>
     <button class="icon-btn" id="pauseBtn" aria-pressed="false" title="Live-Aktualisierung pausieren (P)">${IC.pause}</button>
     <button class="icon-btn" id="schemeBtn" aria-expanded="false" aria-haspopup="true" title="Farbschema (T)">${IC.palette}</button>
     <button class="icon-btn" id="fsBtn" title="TV-Modus / Vollbild (F)">${IC.expand}</button>
+    <a class="cta" id="ctaBtn" href="${esc(N8N_BASE)}/workflow/new" target="_blank" rel="noopener" title="Neuen Workflow in n8n anlegen">${IC.plus}<span>Neuer Workflow</span></a>
     <div class="schemes" id="schemes" role="radiogroup" aria-label="Farbschema" hidden></div>
   </header>
   ${DEMO ? `<div class="demo-strip" id="demoStrip"><span><b>Vorschau mit Demodaten.</b> Die Werte sind simuliert und ändern sich alle 3 Sekunden.</span>
     <span class="seg" role="radiogroup" aria-label="Farbschema-Entwurf" id="demoSeg"></span></div>` : ""}
   <main id="main"></main>
+  </div>
   <div id="drawerHost"></div>
   <div class="tip" id="tip" hidden></div>`;
+function setSide(c) {
+  sideCollapsed = c;
+  document.documentElement.classList.toggle("side-min", c);
+  $("#sideBtn").setAttribute("aria-pressed", String(c));
+  $("#sideBtn").title = c ? "Seitenleiste ausklappen" : "Seitenleiste einklappen";
+  try { localStorage.setItem("cockpit-side", c ? "1" : "0"); } catch { /* privat/gesperrt */ }
+}
+setSide(sideCollapsed);
+$("#sideBtn").onclick = () => setSide(!sideCollapsed);
+$("#bellBtn").onclick = () => {
+  const n = (state.snap?.nodes || []).filter((x) => x.status === "error" || x.status === "waiting").sort((a, b) => SORDER[a.status] - SORDER[b.status])[0];
+  if (n) openDrawer(n.id); else if (state.view !== "cockpit") setView("cockpit");
+};
+document.addEventListener("click", (e) => {
+  const s = e.target.closest("[data-side-sys]"); if (!s) return;
+  state.sys = s.dataset.sideSys; state.status = "all"; setView("workflows");
+});
 
 function renderSchemes() {
   $("#schemes").innerHTML = `<h3>Farbschema wählen</h3>` + SCHEMES.map((s) => `
@@ -131,7 +178,7 @@ function renderSchemes() {
 function setScheme(id) {
   scheme = id;
   document.documentElement.dataset.scheme = id;
-  try { localStorage.setItem("cockpit-theme", id); } catch { /* privat/gesperrt */ }
+  try { localStorage.setItem("cockpit-scheme", id); } catch { /* privat/gesperrt */ }
   colors = cssColors();
   renderSchemes();
   orbit?.recolor();
@@ -158,7 +205,7 @@ $("#schemeBtn").onclick = () => toggleSchemes();
 $("#pauseBtn").onclick = () => togglePause();
 $("#fsBtn").onclick = () => { if (document.fullscreenElement) document.exitFullscreen?.(); else document.documentElement.requestFullscreen?.().catch(() => {}); };
 $("#searchBtn").onclick = () => focusSearch();
-document.querySelectorAll(".tab").forEach((t) => (t.onclick = () => setView(t.dataset.view)));
+document.querySelectorAll("[data-view]").forEach((t) => (t.onclick = () => setView(t.dataset.view)));
 
 function togglePause() {
   state.paused = !state.paused;
@@ -196,7 +243,8 @@ function beat() {
 // ── Ansichten ─────────────────────────────────────────────────────────────────
 function setView(v) {
   state.view = v;
-  document.querySelectorAll(".tab").forEach((t) => t.setAttribute("aria-selected", String(t.dataset.view === v)));
+  document.querySelectorAll('[role="tab"][data-view]').forEach((t) => t.setAttribute("aria-selected", String(t.dataset.view === v)));
+  $("#crumbCur").innerHTML = `${v === "cockpit" ? IC.grid : IC.list}<span>${VIEW_NAME[v]}</span>`;
   orbit?.destroy(); orbit = null;
   const main = $("#main");
   main.innerHTML = v === "cockpit" ? cockpitShell() : workflowsShell();
@@ -249,7 +297,7 @@ function cockpitShell() {
   </div>`;
 }
 const kpiShell = (id, label, tok) => `<div class="card kpi enter" id="${id}" style="--tone:var(${tok})">
-  <div class="kpi-l"><i></i>${label}</div><div class="kpi-v"><span class="v">—</span><small class="of"></small></div>
+  <div class="kpi-l"><i></i>${label}</div><div class="kpi-v"><span class="v">—</span><small class="of"></small><span class="delta" hidden></span></div>
   <div class="kpi-f"></div><div class="spark-host"></div></div>`;
 
 function workflowsShell() {
@@ -273,9 +321,24 @@ function update(fresh = false) {
   updateLive();
   const b = $("#banner");
   if (b) b.innerHTML = state.error ? `<div class="banner">${IC.error}<span>Live-Daten nicht verfügbar: ${esc(state.error)}${state.snap ? " · Es wird der letzte Stand gezeigt." : ""}</span></div>` : "";
+  updateChrome();
   if (state.view === "cockpit") { updateHero(); updateKpis(); updateFeed(fresh); updateTimeline(); updateAttention(); orbit?.setData(state.snap); }
   else updateWorkflows();
   if (state.selected) renderDrawer();
+}
+
+// Glocke (offene Fehler/Wartende) und Seitenleiste (Systeme mit Zählern)
+function updateChrome() {
+  const nodes = state.snap?.nodes; if (!nodes) return;
+  const open = nodes.filter((n) => n.status === "error" || n.status === "waiting").length;
+  $("#bellDot").hidden = !open;
+  $("#bellBtn").title = open ? `${open} Workflow${open > 1 ? "s" : ""} brauchen Aufmerksamkeit` : "Nichts zu tun";
+  $("#sideWf").textContent = nodes.length;
+  const by = {}; nodes.forEach((n) => ((by[n.system] ||= []).push(n)));
+  $("#sideSys").innerHTML = SYSTEMS.filter((x) => by[x]).map((x) => {
+    const err = by[x].some((n) => n.status === "error"), run = by[x].some((n) => n.status === "running");
+    return `<button class="side-item" data-side-sys="${x}" title="${SYS_NAME[x]}" style="--c:${sysVar(x)}"><i class="sq${run ? " run" : ""}"></i><span>${SYS_NAME[x]}</span><em class="num${err ? " bad" : ""}">${by[x].length}</em></button>`;
+  }).join("");
 }
 
 function updateHero() {
@@ -312,6 +375,19 @@ function updateHero() {
   $("#subline").textContent = s;
 }
 
+// Veränderung letzte 12 h gegenüber den 12 h davor; good = Richtung, die gut ist.
+function setDelta(el, vals, good = 1) {
+  const d = $(".delta", el); if (!d) return;
+  if (!vals || vals.length < 4) { d.hidden = true; return; }
+  const h = Math.floor(vals.length / 2), sum = (a) => a.reduce((x, y) => x + y, 0);
+  const a = sum(vals.slice(0, h)), b = sum(vals.slice(h));
+  if (!a && !b) { d.hidden = true; return; }
+  const pct = a ? ((b - a) / a) * 100 : 100, upish = b >= a;
+  d.hidden = false;
+  d.className = "delta " + (b === a ? "flat" : (upish ? 1 : -1) === good ? "good" : "bad");
+  d.innerHTML = `${b === a ? "" : upish ? IC.up : IC.down}${pct > 0 ? "+" : pct < 0 ? "−" : "±"}${Math.abs(pct).toFixed(1).replace(".", ",")} %`;
+  d.title = "Letzte 12 Stunden gegenüber den 12 Stunden davor";
+}
 function setKpi(id, value, of, foot, spark) {
   const el = $("#" + id); if (!el) return;
   const v = $(".v", el);
@@ -329,9 +405,11 @@ function updateKpis() {
   setKpi("k-running", k.running, "", running.length ? esc(shortName(running[0].name)) + (running.length > 1 ? ` +${running.length - 1}` : "") : "Keine laufenden Prozesse");
   const totals = tl.map((b) => b.success + b.error + b.other);
   setKpi("k-runs", k.runs24h ?? null, "", tl.length ? `Ø ${nf.format(Math.round((k.runs24h || 0) / 24))} pro Stunde` : "", totals.length ? totals : null);
+  setDelta($("#k-runs"), totals, 1);
   const errEl = $("#k-err");
   errEl.style.setProperty("--tone", k.errors24h ? "var(--err)" : "var(--ok)");
   setKpi("k-err", k.errors24h ?? null, "", k.failed ? `${k.failed} Workflow${k.failed > 1 ? "s" : ""} aktuell rot` : "Keine offenen Fehler", tl.length ? tl.map((b) => b.error) : null);
+  setDelta(errEl, tl.map((b) => b.error), -1);
 }
 function sparkline(host, vals) {
   const w = host.clientWidth || 200, h = 34, max = Math.max(1, ...vals), n = vals.length;
@@ -364,39 +442,39 @@ function updateTimeline() {
   const tl = state.snap.timeline || [];
   if (!tl.length) { host.innerHTML = `<div class="empty">Keine Zeitleiste verfügbar.</div>`; return; }
   const grow = !host.dataset.grown && !REDUCED; host.dataset.grown = "1";
-  const hasOther = tl.some((b) => b.other);
-  $("#tlLegend").innerHTML = `<span><i style="background:var(--ok)"></i>Erfolgreich</span><span><i style="background:var(--err)"></i>Fehler</span>${hasOther ? `<span><i style="background:var(--idle)"></i>Laufend / wartend</span>` : ""}`;
+  $("#tlLegend").innerHTML = `<span><i class="lg-bar"></i>Läufe pro Stunde</span><span><i class="lg-line"></i>Fehler</span>`;
   const tot = tl.reduce((a, b) => a + b.success + b.error + b.other, 0);
   const peak = tl.reduce((m, b, i) => (b.success + b.error + b.other > m.v ? { v: b.success + b.error + b.other, i } : m), { v: 0, i: 0 });
   $("#tlMeta").textContent = `${nf.format(tot)} Läufe · Spitze ${new Date(tl[peak.i].t).getHours()}:00 Uhr`;
-  const W = host.clientWidth - 36 || 600, H = Math.max(90, host.clientHeight - 24 || 210), ml = 30, mr = 4, mt = 8, mb = 24;
+  const W = host.clientWidth - 36 || 600, H = Math.max(90, host.clientHeight - 24 || 210), ml = 30, mr = 4, mt = 10, mb = 24;
   const pw = W - ml - mr, ph = H - mt - mb;
   const rawMax = Math.max(1, ...tl.map((b) => b.success + b.error + b.other));
   const stepN = rawMax <= 4 ? 1 : rawMax <= 10 ? 2 : rawMax <= 25 ? 5 : rawMax <= 50 ? 10 : Math.ceil(rawMax / 50) * 10;
   const max = Math.ceil(rawMax / stepN) * stepN;
   const y = (v) => mt + ph - (v / max) * ph;
-  const cw = pw / tl.length, bw = Math.max(3, cw - Math.max(2, cw * 0.28));
+  const cw = pw / tl.length, bw = Math.max(3, cw - Math.max(3, cw * 0.34));
   const ticks = []; for (let v = 0; v <= max; v += stepN) ticks.push(v);
   while (ticks.length > 5) for (let i = ticks.length - 2; i > 0; i -= 2) ticks.splice(i, 1);
-  let svg = `<g class="grid">${ticks.map((v) => `<line x1="${ml}" x2="${W - mr}" y1="${y(v)}" y2="${y(v)}"/><text x="${ml - 8}" y="${y(v) + 4}" text-anchor="end">${v}</text>`).join("")}</g>`;
-  const seg = (x, y0, y1, color, roundTop) => {
-    const h = y0 - y1; if (h <= 0.5) return "";
-    const r = roundTop ? Math.min(4, h, bw / 2) : 0;
-    return `<path style="fill:${color}" d="M${x},${y0} V${y1 + r} Q${x},${y1} ${x + r},${y1} H${x + bw - r} Q${x + bw},${y1} ${x + bw},${y1 + r} V${y0} Z"/>`;
-  };
+  // Leuchtende Pillen-Balken (alle Läufe) mit LED-Raster, darüber die Fehler als Linie.
+  let svg = `<defs>
+    <linearGradient id="tlBar" x1="0" y1="0" x2="0" y2="1"><stop offset="0" class="tl-s1"/><stop offset="1" class="tl-s2"/></linearGradient>
+    <pattern id="tlDots" width="3" height="3" patternUnits="userSpaceOnUse"><rect width="1.4" height="1.4" fill="rgba(255,255,255,.22)"/></pattern>
+    <filter id="tlGlow" x="-60%" y="-30%" width="220%" height="160%"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs><g class="grid">${ticks.map((v) => `<line x1="${ml}" x2="${W - mr}" y1="${y(v)}" y2="${y(v)}"/><text x="${ml - 8}" y="${y(v) + 4}" text-anchor="end">${v}</text>`).join("")}</g>`;
+  const pts = [];
   tl.forEach((b, i) => {
-    const x = ml + i * cw + (cw - bw) / 2;
-    const parts = [["var(--ok)", b.success], ["var(--err)", b.error], ["var(--idle)", b.other]].filter((p) => p[1] > 0);
-    let acc = 0, g = "";
-    parts.forEach(([c, v], j) => {
-      const y0 = y(acc) - (j ? 1 : 0), y1 = y(acc + v) + (j < parts.length - 1 ? 1 : 0);
-      g += seg(x, y0, y1, c, j === parts.length - 1); acc += v;
-    });
+    const x = ml + i * cw + (cw - bw) / 2, v = b.success + b.error + b.other;
+    const top = y(v), hgt = y(0) - top, r = Math.min(bw / 2, hgt / 2);
     const hr = new Date(b.t).getHours();
     const last = i === tl.length - 1;
-    svg += `<g class="col${grow ? " grow" : ""}${last ? " now" : ""}" data-i="${i}" style="--d:${i * 28}ms"><rect class="bar-hit" x="${ml + i * cw}" y="${mt}" width="${cw}" height="${ph}" rx="6"/>${g}
+    pts.push([x + bw / 2, y(b.error)]);
+    svg += `<g class="col${grow ? " grow" : ""}${last ? " now" : ""}" data-i="${i}" style="--d:${i * 28}ms"><rect class="bar-hit" x="${ml + i * cw}" y="${mt}" width="${cw}" height="${ph}" rx="6"/>
+      ${hgt > 0.5 ? `<path class="tl-bar" filter="url(#tlGlow)" d="M${x},${y(0) - r} V${top + r} A${r},${r} 0 0 1 ${x + bw},${top + r} V${y(0) - r} A${r},${r} 0 0 1 ${x},${y(0) - r} Z"/>
+      <path class="tl-dots" d="M${x},${y(0) - r} V${top + r} A${r},${r} 0 0 1 ${x + bw},${top + r} V${y(0) - r} A${r},${r} 0 0 1 ${x},${y(0) - r} Z"/>` : ""}
       ${i % 6 === 0 || last ? `<text x="${x + bw / 2}" y="${H - 6}" text-anchor="middle" ${last ? 'style="fill:var(--text)"' : ""}>${last ? "jetzt" : String(hr).padStart(2, "0") + ":00"}</text>` : ""}</g>`;
   });
+  const line = pts.map((p, i) => `${i ? "L" : "M"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
+  svg += `<g class="tl-err${grow ? " draw" : ""}"><path class="tl-line" d="${line}" pathLength="1"/>${pts.map((p, i) => tl[i].error ? `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3.6"/>` : "").join("")}</g>`;
   host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" style="height:${H}px" role="img" aria-label="Ausführungen pro Stunde in den letzten 24 Stunden">${svg}</svg>`;
   host.querySelectorAll(".col").forEach((g) => {
     g.onmousemove = (e) => {
@@ -425,7 +503,7 @@ function updateAttention() {
     const mx = top[0].execCount;
     host.innerHTML += `<div class="top-list"><div class="sec-t">Aktivste Workflows</div>${top.map((n) => `
       <button data-open="${esc(n.id)}" class="top-row"><span class="top-n">${esc(shortName(n.name))}</span><span class="num">${nf.format(n.execCount)}</span>
-      <span class="top-bar"><i style="width:${Math.max(3, (n.execCount / mx) * 100)}%;background:${sysVar(n.system)}"></i></span></button>`).join("")}</div>`;
+      <span class="top-bar" style="--c:${sysVar(n.system)}"><i style="width:${Math.max(3, (n.execCount / mx) * 100)}%"></i><em class="num">${Math.round((n.execCount / mx) * 100)} %</em></span></button>`).join("")}</div>`;
   }
 }
 
