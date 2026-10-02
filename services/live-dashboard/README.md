@@ -61,9 +61,9 @@ Vorausgesetzt: n8n + Caddy laufen bereits per Docker im Netz `n8n_default`
 (`docker-compose.yml`), das sich an dieses externe Netz hängt — die produktive
 n8n-Compose wird nicht verändert.
 
-1. **Dateien holen** (dieses Repo/Branch klonen):
+1. **Dateien holen** (Branch `main` dieses Repos klonen):
    ```bash
-   git clone --branch claude/great-faraday-e6u5yx --single-branch \
+   git clone --branch main --single-branch \
      https://github.com/asb250171/KI-Hub.git ~/live-dashboard-src
    cd ~/live-dashboard-src/services/live-dashboard
    ```
@@ -102,6 +102,14 @@ n8n-Compose wird nicht verändert.
 5. **Aufrufen:** `https://dashboard.compliancemanufaktur.online` (Login = Basic-Auth).
 
 **Update später:** `cd ~/live-dashboard-src && git pull && cd services/live-dashboard && docker compose up -d --build`.
+
+**Bestehender Klon auf einem alten Feature-Branch** (z. B. `claude/great-faraday-e6u5yx`) — einmalig auf `main` umstellen:
+```bash
+cd ~/live-dashboard-src
+git remote set-branches origin main && git fetch origin
+git checkout -B main origin/main
+cd services/live-dashboard && docker compose up -d --build
+```
 
 ## Sicherheit
 - `DASHBOARD_API_KEY` bleibt serverseitig (nie im Browser/Log).
