@@ -23,9 +23,8 @@ live-dashboard ──(SSE /events)──> Browser   (Push bei jedem Poll)
 ## Oberfläche: Prozess-Cockpit
 - **Cockpit**: Lagebild mit 24-h-Erfolgsquote und Status-Satz, Kennzahlen mit Sparklines,
   **Radial-Leitstand** (n8n im Kern, jedes System ein fester Ringsektor, Workflows als
-  geordnete Zellen in Statusfarbe; Radar-Sweep, Lichtstrahlen laufender Prozesse, jede
-  Live-Aktivität schlägt als Blitz in ihren Workflow ein — auch beim Überfahren eines
-  Eintrags in der Live-Aktivität; Schockwelle bei Abschlüssen, Workflow-Kanten als Sehnen),
+  geordnete Zellen in Statusfarbe; Radar-Sweep, Lichtstrahlen laufender Prozesse,
+  Schockwelle bei Abschlüssen, Workflow-Kanten als Sehnen),
   Live-Feed der letzten Ausführungen, 24-h-Zeitleiste, „Braucht Aufmerksamkeit" und „Aktivste Workflows".
 - **Leitstand-Layout**: Ab 1280×720 füllt das Cockpit genau einen Bildschirm (links Lage +
   Kennzahlen, Mitte Radial-Leitstand, rechts Live-Aktivität, unten Zeitleiste + Aufmerksamkeit).
