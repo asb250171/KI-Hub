@@ -85,7 +85,7 @@ function countUp(el, to, fmt = (v) => nf.format(Math.round(v))) {
 function cssColors() {
   const cs = getComputedStyle(document.documentElement), g = (n) => cs.getPropertyValue(n).trim();
   const c = { sys: {} };
-  for (const k of ["text", "muted", "faint", "line", "line-strong", "surface", "surface-2", "surface-3", "accent", "ok", "err", "run", "warn", "idle", "bg", "bolt"]) c[k] = g("--" + k);
+  for (const k of ["text", "muted", "faint", "line", "line-strong", "surface", "surface-2", "surface-3", "accent", "ok", "err", "run", "warn", "idle", "bg"]) c[k] = g("--" + k);
   for (const s of SYSTEMS) c.sys[s] = g("--s-" + s);
   return c;
 }
@@ -429,7 +429,7 @@ function updateFeed(fresh) {
   const key = (r) => r.id + ":" + r.status;
   ul.innerHTML = rec.map((r) => {
     const isNew = seen && !fresh && !seen.has(key(r));
-    return `<li class="${isNew ? "new" : ""}" data-open="${esc(r.workflowId)}" data-strike="${esc(r.workflowId)}" data-st="${r.status}" tabindex="0" style="--tone:${tone(r.status)}">
+    return `<li class="${isNew ? "new" : ""}" data-open="${esc(r.workflowId)}" tabindex="0" style="--tone:${tone(r.status)}">
       <span class="feed-ic" title="${SLABEL[r.status] || r.status}">${IC[r.status] || IC.unknown}</span>
       <span class="feed-t"><b>${esc(shortName(r.name))}</b><small><i style="background:${sysVar(r.system)}"></i>${SYS_NAME[r.system] || r.system} · ${SLABEL[r.status] || r.status}</small></span>
       <span class="feed-r"><span data-rel="${esc(r.startedAt)}">${rel(r.startedAt)}</span><span class="num">${r.status === "running" ? "läuft …" : dur(r.durationMs)}</span></span></li>`;
@@ -616,17 +616,6 @@ function renderDrawer(focus = false) {
   if (focus || hadFocus) $("#dClose").focus();
 }
 
-// Hover/Fokus auf Live-Aktivität oder Meldung → Blitz auf den Workflow im Ring
-let lastStrike = null;
-const strikeFrom = (e) => {
-  const el = e.target.closest?.("[data-strike]"); if (!el || el === lastStrike) return;
-  lastStrike = el; setTimeout(() => { if (lastStrike === el) lastStrike = null; }, 900);
-  const st = el.dataset.st;
-  orbit?.strike(el.dataset.strike, { success: colors.ok, error: colors.err, running: colors.run, waiting: colors.warn }[st] || colors.accent);
-};
-document.addEventListener("mouseover", strikeFrom);
-document.addEventListener("focusin", strikeFrom);
-
 // ── Ereignis-Meldungen im Leitstand ───────────────────────────────────────────
 function pushEvent(n, kind) {
   const host = $("#events"); if (!host) return;
@@ -637,7 +626,6 @@ function pushEvent(n, kind) {
   el.innerHTML = `<span class="evt-ic">${IC[st]}</span><span class="evt-t"><b>${esc(shortName(n.name))}</b>
     <small>${kind === "start" ? "gestartet" : st === "error" ? "fehlgeschlagen" : "erfolgreich"}${kind !== "start" && rec?.durationMs != null ? ` in ${dur(rec.durationMs)}` : ""} · ${SYS_NAME[n.system]}</small></span>`;
   el.onclick = () => openDrawer(n.id);
-  el.dataset.strike = n.id; el.dataset.st = st;
   host.prepend(el);
   while (host.children.length > 3) host.lastChild.remove();
   setTimeout(() => { el.classList.add("out"); setTimeout(() => el.remove(), 450); }, 5200);
@@ -657,10 +645,8 @@ function hideTip() { $("#tip").hidden = true; }
 // n8n im Zentrum. Jedes System besitzt einen festen Sektor des Außenrings
 // (Breite ∝ Anzahl Workflows), die Workflows sitzen als radial ausgerichtete
 // Zellen darin (alphabetisch, Farbe = Status). Ein Radar-Sweep tastet den Ring
-// ab, laufende Workflows senden Lichtstrahlen zum Kern, jede Live-Aktivität
-// schlägt als Blitz vom Kern in ihren Workflow ein, Abschlüsse lösen zusätzlich
-// eine Schockwelle aus. Workflow-Kanten laufen als Sehnen
-// durch das Innere.
+// ab, laufende Workflows senden Lichtstrahlen zum Kern, Abschlüsse lösen eine
+// Schockwelle aus. Workflow-Kanten laufen als Sehnen durch das Innere.
 const SECTOR_ORDER = ["hubspot", "claude", "openai", "m365", "monday", "stripe", "extern", "n8n"];
 const TAU = Math.PI * 2;
 const normA = (a) => ((a % TAU) + TAU) % TAU;
@@ -700,11 +686,10 @@ class Radial {
     if (this.prev.size) {
       for (const n of snap.nodes) {
         const p = this.prev.get(n.id); if (!p) continue;
-        if (n.status === "running" && p.status !== "running") { this.strike(n.id, colors.run); pushEvent(n, "start"); }
+        if (n.status === "running" && p.status !== "running") pushEvent(n, "start");
         else if ((p.status === "running" && n.status !== "running") || (n.lastRunAt !== p.lastRunAt && n.status !== "running")) {
           const color = n.status === "error" ? colors.err : colors.ok;
-          this.strike(n.id, color);
-          this.fx.push({ type: "wave", t0: this.t + 0.7, color });
+          this.fx.push({ type: "wave", t0: this.t, color });
           pushEvent(n, "done");
         }
       }
@@ -763,21 +748,6 @@ class Radial {
   step(now) {
     const dt = Math.min(0.05, (now - this.last) / 1000); this.last = now;
     if (!REDUCED && !state.paused) this.t += dt;
-    // Blitze auf alle aktiven Workflows: reihum im Uhrzeigersinn, Farbe = Status
-    if (!REDUCED && !state.paused && this.snap) {
-      const tone = (st) => ({ success: colors.ok, error: colors.err, running: colors.run, waiting: colors.warn }[st] || colors.idle);
-      const act = this.cells.filter((c) => c.n.active);
-      if (act.length && this.t >= (this.nextAmbient ?? 1.6)) {
-        const c = act[(this.ambientIdx = ((this.ambientIdx ?? -1) + 1) % act.length)];
-        this.strike(c.n.id, tone(c.n.status));
-        this.nextAmbient = this.t + Math.max(0.22, Math.min(1.2, 6 / act.length));
-      }
-      // Laufende Workflows zusätzlich etwa jede Sekunde
-      if (this.t >= (this.nextRunning ?? 1)) {
-        for (const c of this.cells) if (c.n.status === "running") this.strike(c.n.id, colors.run);
-        this.nextRunning = this.t + 1.05;
-      }
-    }
     this.fx = this.fx.filter((f) => this.t - f.t0 < 2.2);
     this.draw();
   }
@@ -913,57 +883,13 @@ class Radial {
         ctx.strokeStyle = rgba(C.sys[u] || C.accent, 0.8); ctx.lineWidth = 1.5; ctx.setLineDash([3, 4]); ctx.stroke(); ctx.setLineDash([]);
       }
     });
-    // Blitze: vom n8n-Kern in den Workflow (jede Live-Aktivität, Hover im Feed)
-    for (const f of this.fx) if (f.type === "bolt") this.drawBolt(f, C);
 
     const running = this.snap.nodes.filter((n) => n.status === "running").length;
     this.drawHub(C, running, ease);
   }
-  // Blitz auslösen (öffentlich: auch vom Live-Feed per Hover)
-  strike(id, color) {
-    if (REDUCED || !this.cellOf?.[id]) return;
-    this.fx = this.fx.filter((f) => !(f.type === "bolt" && f.id === id));
-    // Schemata mit eigener Blitzfarbe (--bolt, z. B. Studio: Cyan) überstimmen die Statusfarbe.
-    this.fx.push({ type: "bolt", id, color: colors.bolt || color || colors.accent, t0: this.t, seed: Math.floor(Math.random() * 1e6) });
-  }
-  drawBolt(f, C) {
-    const c = this.cellOf[f.id]; if (!c) return;
-    const u = (this.t - f.t0) / 0.75; if (u >= 1 || u < 0) return;
-    const ctx = this.ctx, cx = this.cx, cy = this.cy;
-    const x0 = cx + Math.cos(c.ang) * this.hubR, y0 = cy + Math.sin(c.ang) * this.hubR;
-    const dx = c.x - x0, dy = c.y - y0, len = Math.hypot(dx, dy), nx = -dy / len, ny = dx / len;
-    // Zackenpfad, flackert alle ~50 ms neu
-    let seed = f.seed + Math.floor(this.t * 20) * 7919;
-    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-    const segs = Math.max(6, Math.round(len / 22)), amp = Math.min(16, len * 0.07);
-    const pts = [[x0, y0]];
-    for (let i = 1; i < segs; i++) {
-      const k = i / segs, off = (rnd() - 0.5) * 2 * amp * Math.sin(k * Math.PI);
-      pts.push([x0 + dx * k + nx * off, y0 + dy * k + ny * off]);
-    }
-    pts.push([c.x, c.y]);
-    const branch = [];
-    const bi = 2 + Math.floor(rnd() * (segs - 3)), [bx, by] = pts[bi];
-    for (let j = 1; j <= 3; j++) branch.push([bx + dx * 0.07 * j + nx * (rnd() - 0.2) * 14 * j, by + dy * 0.07 * j + ny * (rnd() - 0.2) * 14 * j]);
-    const flick = u < 0.12 ? 1 : (0.55 + 0.45 * rnd()) * (1 - u);
-    const path = (arr) => { ctx.beginPath(); ctx.moveTo(arr[0][0], arr[0][1]); for (const p of arr.slice(1)) ctx.lineTo(p[0], p[1]); };
-    ctx.save(); ctx.lineJoin = "round"; ctx.lineCap = "round";
-    ctx.shadowColor = f.color; ctx.shadowBlur = 30;
-    path(pts); ctx.strokeStyle = rgba(f.color, 0.4 * flick); ctx.lineWidth = 11; ctx.stroke();
-    path(pts); ctx.strokeStyle = rgba(f.color, 1 * flick); ctx.lineWidth = 3.4; ctx.stroke();
-    ctx.shadowBlur = 0;
-    path(pts); ctx.strokeStyle = `rgba(255,255,255,${0.9 * flick})`; ctx.lineWidth = 1.4; ctx.stroke();
-    path([[bx, by], ...branch]); ctx.strokeStyle = rgba(f.color, 0.7 * flick); ctx.lineWidth = 1.3; ctx.stroke();
-    // Einschlag: Lichtblitz + Ring an der Zelle
-    const g = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, 34);
-    g.addColorStop(0, rgba(f.color, 0.75 * flick)); g.addColorStop(1, rgba(f.color, 0));
-    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(c.x, c.y, 34, 0, TAU); ctx.fill();
-    ctx.beginPath(); ctx.arc(c.x, c.y, 6 + u * 24, 0, TAU); ctx.strokeStyle = rgba(f.color, 0.8 * (1 - u)); ctx.lineWidth = 2; ctx.stroke();
-    ctx.restore();
-  }
   drawHub(C, running, ease = 1) {
     const ctx = this.ctx, cx = this.cx, cy = this.cy, r = this.hubR * (0.6 + 0.4 * ease), t = this.t;
-    const flash = Math.max(0, ...this.fx.filter((f) => (f.type === "wave" || f.type === "bolt") && t >= f.t0).map((f) => (f.type === "bolt" ? 0.6 : 1) * (1 - (t - f.t0) / 0.5)));
+    const flash = Math.max(0, ...this.fx.filter((f) => f.type === "wave" && t >= f.t0).map((f) => 1 - (t - f.t0) / 0.5));
     const breath = (REDUCED ? 0.5 : Math.sin(t * 1.6) * 0.5 + 0.5) + flash * 1.2;
     const g = ctx.createRadialGradient(cx, cy, r * 0.3, cx, cy, r * (2.4 + flash));
     g.addColorStop(0, rgba(C.sys.n8n, 0.45 + 0.15 * breath)); g.addColorStop(1, rgba(C.sys.n8n, 0));
