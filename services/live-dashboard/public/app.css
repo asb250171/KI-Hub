@@ -578,6 +578,7 @@ button.crumb:hover{color:var(--text)}
   --shadow:0 24px 60px -24px rgba(0,0,0,.9);
   --s-hubspot:#ff8a3d;--s-n8n:#22d3ee;--s-claude:#a78bfa;--s-openai:#3ee07f;
   --s-m365:#2f8bff;--s-monday:#ff4fb4;--s-stripe:#7b7dff;--s-extern:#c9b23a;
+  --bolt:#22d3ee;
   --card:linear-gradient(180deg,rgba(255,255,255,.035),rgba(255,255,255,.008) 40%),#0f0f13;
   --card-edge:rgba(255,255,255,.075);
   --card-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 30px 60px -32px rgba(0,0,0,.95);
