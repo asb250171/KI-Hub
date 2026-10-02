@@ -85,7 +85,7 @@ function countUp(el, to, fmt = (v) => nf.format(Math.round(v))) {
 function cssColors() {
   const cs = getComputedStyle(document.documentElement), g = (n) => cs.getPropertyValue(n).trim();
   const c = { sys: {} };
-  for (const k of ["text", "muted", "faint", "line", "line-strong", "surface", "surface-2", "surface-3", "accent", "ok", "err", "run", "warn", "idle", "bg"]) c[k] = g("--" + k);
+  for (const k of ["text", "muted", "faint", "line", "line-strong", "surface", "surface-2", "surface-3", "accent", "ok", "err", "run", "warn", "idle", "bg", "bolt"]) c[k] = g("--" + k);
   for (const s of SYSTEMS) c.sys[s] = g("--s-" + s);
   return c;
 }
@@ -923,7 +923,8 @@ class Radial {
   strike(id, color) {
     if (REDUCED || !this.cellOf?.[id]) return;
     this.fx = this.fx.filter((f) => !(f.type === "bolt" && f.id === id));
-    this.fx.push({ type: "bolt", id, color: color || colors.accent, t0: this.t, seed: Math.floor(Math.random() * 1e6) });
+    // Schemata mit eigener Blitzfarbe (--bolt, z. B. Studio: Cyan) überstimmen die Statusfarbe.
+    this.fx.push({ type: "bolt", id, color: colors.bolt || color || colors.accent, t0: this.t, seed: Math.floor(Math.random() * 1e6) });
   }
   drawBolt(f, C) {
     const c = this.cellOf[f.id]; if (!c) return;
