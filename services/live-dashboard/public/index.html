@@ -6,8 +6,8 @@
 <title>Prozess-Cockpit</title>
 <script>
   // Farbschema vor dem ersten Paint setzen (kein Aufblitzen des falschen Themes).
-  (function(){ var t; try{ t=localStorage.getItem("cockpit-theme"); }catch(e){}
-    if(!t) t = matchMedia("(prefers-color-scheme: light)").matches ? "porzellan" : "polarnacht";
+  (function(){ var t; try{ t=localStorage.getItem("cockpit-scheme"); }catch(e){}
+    if(!t) t = matchMedia("(prefers-color-scheme: light)").matches ? "porzellan" : "studio";
     document.documentElement.dataset.scheme = t; })();
 </script>
 <link rel="stylesheet" href="/app.css" />

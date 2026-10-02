@@ -33,8 +33,12 @@ live-dashboard ──(SSE /events)──> Browser   (Push bei jedem Poll)
   Ereignis-Meldungen unter dem Ring zeigen jeden Start und Abschluss.
 - **Workflows**: Suche, Filter nach System und Status, sortierbare Tabelle.
 - **Detail-Schublade** je Workflow mit Verbindungen, letzten Läufen und Link nach n8n.
-- **Drei Farbschemata**: Polarnacht (dunkel, kühl), Kupfer (dunkel, warm),
-  Porzellan (hell). Standard folgt dem System-Theme; die Wahl wird im Browser gespeichert.
+- **Studio-Design** (Standard): tiefschwarzer, filmischer Leitstand-Look mit LED-Raster,
+  leuchtenden Pillen-Balken (Läufe) samt Fehlerlinie, Lichtkante unter den Kennzahlen,
+  Veränderungs-Pills (letzte 12 h ggü. den 12 h davor), Seitenleiste mit Systemen,
+  Pfad-Navigation, `⌘K`-Suche, Glocke für offene Fehler und Verlaufs-Knopf „Neuer Workflow“ (öffnet n8n).
+- **Vier Farbschemata**: Studio (Standard, dunkel), Polarnacht (dunkel, kühl), Kupfer (dunkel, warm),
+  Porzellan (hell). Bei hellem System-Theme startet Porzellan; die Wahl wird im Browser gespeichert.
 - **Tastatur**: `/` oder `Strg+K` Suche · `1`/`2` Ansicht · `T` Farbschema · `P` Pause · `F` TV-Modus · `Esc` schließen.
 - **Demo**: `/?demo` zeigt simulierte Daten (klar markiert) — zum Ausprobieren ohne n8n.
 - Schriften sind selbst gehostet (`public/fonts`, kein Google-Fonts-Abruf).
