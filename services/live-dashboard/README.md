@@ -124,5 +124,8 @@ DASHBOARD_API_KEY=xxxx node server.mjs
 
 ## Wartung
 - Poll-Intervall via `POLL_MS`.
+- Anzeigezeitraum: das Cockpit zeigt nur Läufe der **letzten 24 Stunden** (`WINDOW_MS` in `topology.mjs`).
+  Die eigenen Abfragen des Workflows „Dashboard API - Live Workflow Status“ werden ausgeblendet
+  (`SELF_WORKFLOW_ID`). Der Webhook liefert dazu alle Ausführungen der letzten 24 h statt nur der letzten 50.
 - Topologie (Systeme, verifizierte Kanten) in `topology.mjs` — Spiegel der App
   (`src/lib/live-processes`). Bei neuen belegten Verbindungen dort ergänzen.
