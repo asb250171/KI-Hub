@@ -66,7 +66,19 @@ function mapStatus(s) {
  * @param {Array} workflows  n8n /workflows data[] (id, name, active, updatedAt, tags)
  * @param {Array} executions n8n /executions data[] (id, workflowId, status, startedAt, stoppedAt)
  */
-export function buildSnapshot(workflows, executions) {
+// Workflow "Dashboard API - Live Workflow Status": wird vom Dienst selbst alle
+// paar Sekunden abgefragt — seine Läufe sind reines Rauschen und werden nicht angezeigt.
+export const SELF_WORKFLOW_ID = "0QlSXZTZBeNy6Wff";
+
+// Anzeigezeitraum des Dashboards.
+export const WINDOW_MS = 24 * 3600e3;
+
+export function buildSnapshot(workflows, allExecutions) {
+  // Nur Läufe der letzten 24 Stunden anzeigen (ohne die eigenen Abfragen).
+  const since = Date.now() - WINDOW_MS;
+  const executions = (allExecutions || []).filter((ex) =>
+    ex.workflowId !== SELF_WORKFLOW_ID &&
+    new Date(ex.startedAt || ex.stoppedAt || 0).getTime() >= since);
   const visible = (workflows || []).filter((w) => !isInternal(w.name));
 
   const latest = new Map();

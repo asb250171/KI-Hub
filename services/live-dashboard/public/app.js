@@ -602,7 +602,7 @@ function renderDrawer(focus = false) {
         <div class="facts">
           <div class="fact"><span>Letzter Lauf</span><b data-rel="${esc(n.lastRunAt || "")}">${rel(n.lastRunAt)}</b><span>${absTime(n.lastRunAt)}</span></div>
           <div class="fact"><span>Dauer letzter Lauf</span><b class="num">${n.status === "running" ? "läuft …" : dur(lastDur)}</b></div>
-          <div class="fact"><span>Ausführungen</span><b class="num">${nf.format(n.execCount)}</b><span>im Abfragezeitraum</span></div>
+          <div class="fact"><span>Ausführungen</span><b class="num">${nf.format(n.execCount)}</b><span>letzte 24 h</span></div>
           <div class="fact"><span>Zuletzt geändert</span><b>${rel(n.updatedAt)}</b><span>${absTime(n.updatedAt)}</span></div>
         </div>
         ${runs.length ? `<div><div class="sec-t">Letzte Läufe</div><div class="runs">${runs.map((r) => `<i style="--tone:${tone(r.status)}" title="${SLABEL[r.status]} · ${absTime(r.startedAt)}"></i>`).join("")}</div></div>` : ""}
