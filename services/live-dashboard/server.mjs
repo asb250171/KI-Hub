@@ -98,6 +98,13 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Einfache Abfrage als Rückfallebene, falls der SSE-Stream unterwegs gepuffert wird.
+  if (path === "/snapshot") {
+    res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
+    res.end(JSON.stringify({ snapshot, error: lastError, lastOkAt }));
+    return;
+  }
+
   if (path === "/events") {
     res.writeHead(200, {
       "content-type": "text/event-stream",

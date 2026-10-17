@@ -46,6 +46,8 @@ live-dashboard ──(SSE /events)──> Browser   (Push bei jedem Poll)
 - `GET /` – Prozess-Cockpit (siehe oben); statische Dateien über eine feste Whitelist
 - `GET /events` – SSE-Stream (Snapshot bei Verbindung + bei jedem Poll; enthält
   `nodes`, `edges`, `kpis`, `timeline` (24 Stunden-Buckets) und `recent` (letzte 30 Ausführungen))
+- `GET /snapshot` – derselbe Stand als einfache JSON-Abfrage; das Cockpit greift darauf zurück,
+  wenn über `/events` 12 s lang nichts ankommt (z. B. weil ein Proxy den Stream puffert)
 - `GET /healthz` – JSON `{ ok, lastOkAt, ageMs, error }`
 
 ## Konfiguration (`.env`)
