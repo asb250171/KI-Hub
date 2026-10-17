@@ -98,10 +98,20 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Einfache Abfrage als Rückfallebene, falls der SSE-Stream unterwegs gepuffert wird.
+  if (path === "/snapshot") {
+    res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
+    res.end(JSON.stringify({ snapshot, error: lastError, lastOkAt }));
+    return;
+  }
+
   if (path === "/events") {
     res.writeHead(200, {
       "content-type": "text/event-stream",
-      "cache-control": "no-store",
+      // no-transform: Reverse-Proxys (Caddy "encode") dürfen den Stream nicht
+      // komprimieren — sonst puffern sie ihn und der Browser bleibt bei "Verbinde".
+      "cache-control": "no-store, no-transform",
+      "x-accel-buffering": "no",
       connection: "keep-alive",
     });
     res.write("retry: 5000\n\n");

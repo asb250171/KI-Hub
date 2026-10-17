@@ -954,9 +954,24 @@ function onData(d) {
   beat(); update();
 }
 function connect() {
+  let lastEvent = 0;
   const es = new EventSource("/events");
-  es.addEventListener("snapshot", (ev) => { try { onData(JSON.parse(ev.data)); } catch { /* defektes Paket ignorieren */ } });
+  es.addEventListener("snapshot", (ev) => { lastEvent = Date.now(); try { onData(JSON.parse(ev.data)); } catch { /* defektes Paket ignorieren */ } });
   es.onerror = () => { state.error = "Verbindung zum Dienst unterbrochen (neuer Versuch läuft)."; update(); };
+  // Rückfallebene: Kommen über den Stream keine Daten an (z. B. weil ein
+  // Reverse-Proxy ihn puffert), wird der Snapshot per einfacher Abfrage geholt
+  // — statt dauerhaft bei "Verbinde" zu hängen.
+  const start = Date.now();
+  setInterval(async () => {
+    if (Date.now() - Math.max(lastEvent, start) < 12000) return;
+    try {
+      const res = await fetch("/snapshot", { cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      onData(await res.json());
+    } catch (e) {
+      state.error = `Keine Live-Daten vom Dienst (${e.message || e}).`; update();
+    }
+  }, 5000);
 }
 function startDemo() {
   const go = () => window.CockpitDemo.start(onData);
