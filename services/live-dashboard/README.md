@@ -86,7 +86,10 @@ n8n-Compose wird nicht verändert.
    Block (Hash einsetzen, Nutzername frei):
    ```
    dashboard.compliancemanufaktur.online {
-       encode zstd gzip
+       # Live-Stream /events NICHT komprimieren — sonst puffert Caddy ihn und
+       # das Cockpit bleibt dauerhaft bei "Verbinde".
+       @nosse not path /events
+       encode @nosse zstd gzip
        basic_auth {
            dashboard   <HASH>
        }
